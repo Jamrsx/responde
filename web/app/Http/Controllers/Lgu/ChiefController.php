@@ -29,7 +29,7 @@ class ChiefController extends Controller
         $chiefs = User::query()
             ->where('role', UserRole::Chief)
             ->where('lgu_id', $lgu->id)
-            ->with(['station:id,name,station_type_id', 'station.stationType:id,name,code'])
+            ->with(['station:id,name,station_type_id,latitude,longitude', 'station.stationType:id,name,code'])
             ->latest()
             ->get()
             ->map(fn (User $user): array => [
@@ -40,29 +40,78 @@ class ChiefController extends Controller
                 'station_id' => $user->station_id,
                 'station' => $user->station?->name,
                 'station_type' => $user->station?->stationType?->name,
+                'latitude' => $user->station?->latitude,
+                'longitude' => $user->station?->longitude,
                 'created_at' => $user->created_at?->diffForHumans(),
             ]);
 
-        $stationsWithoutChief = Station::query()
-            ->with('stationType:id,name,code')
+        $stations = Station::query()
+            ->with([
+                'stationType:id,name,code',
+                'chief:id,name,email,phone',
+                'barangay:id,name',
+            ])
             ->where('lgu_id', $lgu->id)
             ->where('approval_status', 'approved')
-            ->whereNull('chief_user_id')
             ->whereHas('stationType', fn ($query) => $query->where('code', '!=', 'tanod'))
             ->orderBy('name')
-            ->get(['id', 'name', 'station_type_id']);
+            ->get([
+                'id',
+                'name',
+                'station_type_id',
+                'barangay_id',
+                'chief_user_id',
+                'latitude',
+                'longitude',
+                'address',
+            ]);
+
+        $stationsWithoutChief = $stations
+            ->whereNull('chief_user_id')
+            ->values();
 
         return Inertia::render('lgu/chiefs/index', [
             'lgu' => [
                 'id' => $lgu->id,
                 'name' => $lgu->name,
+                'psgc_code' => $lgu->psgc_code,
+                'latitude' => $lgu->latitude,
+                'longitude' => $lgu->longitude,
             ],
             'chiefs' => $chiefs,
+            'stations' => $stations->map(fn (Station $station): array => [
+                'id' => $station->id,
+                'name' => $station->name,
+                'type' => $station->stationType?->name,
+                'type_code' => $station->stationType?->code,
+                'barangay' => $station->barangay?->name,
+                'address' => $station->address,
+                'latitude' => $station->latitude,
+                'longitude' => $station->longitude,
+                'has_chief' => $station->chief_user_id !== null,
+                'chief' => $station->chief
+                    ? [
+                        'id' => $station->chief->id,
+                        'name' => $station->chief->name,
+                        'email' => $station->chief->email,
+                        'phone' => $station->chief->phone,
+                    ]
+                    : null,
+            ]),
             'stationsWithoutChief' => $stationsWithoutChief->map(fn (Station $station): array => [
                 'id' => $station->id,
                 'name' => $station->name,
                 'type' => $station->stationType?->name,
             ]),
+            'mapUrl' => $lgu->psgc_code
+                ? route('map-data.barangays.show', ['psgc' => $lgu->psgc_code], absolute: false)
+                : null,
+            'stats' => [
+                'totalStations' => $stations->count(),
+                'withChief' => $stations->whereNotNull('chief_user_id')->count(),
+                'withoutChief' => $stationsWithoutChief->count(),
+                'chiefs' => $chiefs->count(),
+            ],
         ]);
     }
 

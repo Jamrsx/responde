@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'longitude',
     'status',
     'approval_status',
+    'other_type_name',
 ])]
 class Station extends Model
 {

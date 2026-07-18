@@ -61,6 +61,39 @@ class StationController extends Controller
         ]);
     }
 
+    public function create(Request $request): Response
+    {
+        $lgu = $this->currentLgu($request);
+
+        Log::info('LGU station create page opened.', [
+            'lgu_id' => $lgu->id,
+            'actor_user_id' => $request->user()?->id,
+        ]);
+
+        return Inertia::render('lgu/stations/create', [
+            'lgu' => [
+                'id' => $lgu->id,
+                'name' => $lgu->name,
+                'psgc_code' => $lgu->psgc_code,
+                'latitude' => $lgu->latitude,
+                'longitude' => $lgu->longitude,
+            ],
+            'stationTypes' => StationType::query()
+                ->where('is_active', true)
+                ->where('code', '!=', 'tanod')
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']),
+            'barangays' => Barangay::query()
+                ->where('lgu_id', $lgu->id)
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']),
+            'mapUrl' => $lgu->psgc_code
+                ? route('map-data.barangays.show', ['psgc' => $lgu->psgc_code], absolute: false)
+                : null,
+        ]);
+    }
+
     public function store(StoreStationRequest $request): RedirectResponse
     {
         $lgu = $this->currentLgu($request);
@@ -81,6 +114,7 @@ class StationController extends Controller
             'new_values' => $station->only([
                 'name',
                 'station_type_id',
+                'other_type_name',
                 'barangay_id',
                 'latitude',
                 'longitude',
@@ -95,7 +129,9 @@ class StationController extends Controller
             'actor_user_id' => $request->user()?->id,
         ]);
 
-        return back()->with('success', "{$station->name} was added successfully.");
+        return redirect()
+            ->route('lgu.stations.index')
+            ->with('success', "{$station->name} was added successfully.");
     }
 
     public function update(UpdateStationRequest $request, Station $station): RedirectResponse
@@ -116,6 +152,7 @@ class StationController extends Controller
         $old = $station->only([
             'name',
             'station_type_id',
+            'other_type_name',
             'barangay_id',
             'latitude',
             'longitude',
@@ -207,6 +244,10 @@ class StationController extends Controller
      */
     private function serializeStation(Station $station): array
     {
+        $typeLabel = $station->stationType?->code === 'other' && filled($station->other_type_name)
+            ? "Other · {$station->other_type_name}"
+            : $station->stationType?->name;
+
         return [
             'id' => $station->id,
             'name' => $station->name,
@@ -218,7 +259,8 @@ class StationController extends Controller
             'approval_status' => $station->approval_status,
             'station_type_id' => $station->station_type_id,
             'barangay_id' => $station->barangay_id,
-            'type' => $station->stationType?->name,
+            'other_type_name' => $station->other_type_name,
+            'type' => $typeLabel,
             'type_code' => $station->stationType?->code,
             'barangay' => $station->barangay?->name,
             'chief' => $station->chief

@@ -21,6 +21,36 @@ type StationMarker = {
     color?: string;
 };
 
+function FitMarkers({
+    markers,
+}: {
+    markers: StationMarker[];
+}) {
+    const map = useMap();
+    const markerKey = markers
+        .map(
+            (marker) =>
+                `${marker.id}:${marker.latitude}:${marker.longitude}`,
+        )
+        .join('|');
+
+    useEffect(() => {
+        if (!markerKey) {
+            return;
+        }
+
+        const points = markerKey.split('|').map((part) => {
+            const [, lat, lng] = part.split(':');
+
+            return [Number(lat), Number(lng)] as [number, number];
+        });
+        const bounds = L.latLngBounds(points);
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    }, [markerKey, map]);
+
+    return null;
+}
+
 function ClickPicker({
     enabled,
     onPick,
@@ -78,7 +108,9 @@ export default function StationPointMap({
     markers,
     selected,
     onPick,
+    onMarkerClick,
     pickEnabled = true,
+    fitMarkers = false,
     boundaryUrl,
     selectedBarangayPsgc,
     className = 'h-[min(55vh,480px)] w-full min-h-[320px]',
@@ -87,7 +119,9 @@ export default function StationPointMap({
     markers: StationMarker[];
     selected?: { latitude: number; longitude: number } | null;
     onPick?: (lat: number, lng: number) => void;
+    onMarkerClick?: (markerId: number | string) => void;
     pickEnabled?: boolean;
+    fitMarkers?: boolean;
     boundaryUrl?: string | null;
     selectedBarangayPsgc?: string | null;
     className?: string;
@@ -163,6 +197,7 @@ export default function StationPointMap({
                     url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <LockToBoundary boundary={boundary} />
+                {fitMarkers && <FitMarkers markers={markers} />}
                 {outsideMask && (
                     <GeoJSON
                         data={outsideMask}
@@ -187,6 +222,19 @@ export default function StationPointMap({
                         position={[marker.latitude, marker.longitude]}
                         icon={markerIcon(marker.color)}
                         title={marker.name}
+                        eventHandlers={
+                            onMarkerClick
+                                ? {
+                                      click: () => {
+                                          console.log(
+                                              '[Responde LGU] Station marker clicked',
+                                              marker.id,
+                                          );
+                                          onMarkerClick(marker.id);
+                                      },
+                                  }
+                                : undefined
+                        }
                     />
                 ))}
                 {selected && (
@@ -199,11 +247,11 @@ export default function StationPointMap({
                     <ClickPicker enabled={pickEnabled} onPick={onPick} />
                 )}
             </MapContainer>
-            {pickEnabled && (
+            {pickEnabled && onPick ? (
                 <p className="border-t border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500">
                     Click the map to place or move the station marker.
                 </p>
-            )}
+            ) : null}
         </div>
     );
 }

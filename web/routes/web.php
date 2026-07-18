@@ -118,6 +118,8 @@ Route::middleware('auth')->group(function (): void {
 
         Route::get('/stations', [StationController::class, 'index'])
             ->name('lgu.stations.index');
+        Route::get('/stations/create', [StationController::class, 'create'])
+            ->name('lgu.stations.create');
         Route::post('/stations', [StationController::class, 'store'])
             ->name('lgu.stations.store');
         Route::put('/stations/{station}', [StationController::class, 'update'])

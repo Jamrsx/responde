@@ -34,6 +34,9 @@ return new class extends Migration
                 ->default('approved')
                 ->after('status')
                 ->index();
+            $table->string('other_type_name')
+                ->nullable()
+                ->after('station_type_id');
             $table->index('chief_user_id');
             $table->index(['lgu_id', 'approval_status']);
         });
@@ -45,7 +48,7 @@ return new class extends Migration
             $table->dropIndex(['lgu_id', 'approval_status']);
             $table->dropConstrainedForeignId('submitted_by_user_id');
             $table->dropConstrainedForeignId('chief_user_id');
-            $table->dropColumn('approval_status');
+            $table->dropColumn(['approval_status', 'other_type_name']);
         });
 
         Schema::table('barangays', function (Blueprint $table) {
