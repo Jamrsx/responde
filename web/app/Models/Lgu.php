@@ -7,7 +7,24 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'code', 'province', 'municipality', 'contact_number', 'is_active'])]
+/**
+ * @property-read int|null $stations_count
+ * @property-read int|null $lgu_admins_count
+ */
+#[Fillable([
+    'name',
+    'code',
+    'province',
+    'municipality',
+    'contact_number',
+    'psgc_code',
+    'classification',
+    'region',
+    'latitude',
+    'longitude',
+    'area_km2',
+    'is_active',
+])]
 class Lgu extends Model
 {
     use SoftDeletes;
@@ -23,6 +40,9 @@ class Lgu extends Model
     {
         return [
             'is_active' => 'boolean',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
+            'area_km2' => 'decimal:2',
         ];
     }
 

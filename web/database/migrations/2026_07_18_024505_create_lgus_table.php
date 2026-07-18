@@ -18,6 +18,12 @@ return new class extends Migration
             $table->string('province')->nullable();
             $table->string('municipality')->nullable();
             $table->string('contact_number')->nullable();
+            $table->string('psgc_code', 20)->nullable()->unique();
+            $table->string('classification', 50)->nullable();
+            $table->string('region')->nullable();
+            $table->decimal('latitude', 10, 7)->nullable();
+            $table->decimal('longitude', 10, 7)->nullable();
+            $table->decimal('area_km2', 10, 2)->nullable();
             $table->boolean('is_active')->default(true)->index();
             $table->timestamps();
             $table->softDeletes();

@@ -25,7 +25,7 @@ test('user can authenticate with valid credentials', function () {
         'email' => $user->email,
         'password' => 'password',
         'remember' => true,
-    ])->assertRedirect(route('home', absolute: false));
+    ])->assertRedirect(route('admin.dashboard', absolute: false));
 
     $this->assertAuthenticatedAs($user);
     $this->assertDatabaseHas(LoginAttempt::class, [
@@ -85,4 +85,12 @@ test('authenticated user can log out', function () {
         ->assertRedirect(route('login'));
 
     $this->assertGuest();
+});
+
+test('authenticated super admin is redirected away from login to admin dashboard', function () {
+    $user = User::factory()->superAdmin()->create();
+
+    $this->actingAs($user)
+        ->get(route('login'))
+        ->assertRedirect('/admin');
 });

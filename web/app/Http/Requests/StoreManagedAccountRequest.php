@@ -34,7 +34,7 @@ class StoreManagedAccountRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique(User::class)],
             'password' => ['required', 'confirmed', Password::defaults()],
-            'phone' => ['nullable', 'string', 'max:20'],
+            'phone' => ['nullable', 'string', 'regex:/^09\d{9}$/'],
             'lgu_id' => [
                 Rule::requiredIf(fn (): bool => $actor?->role === UserRole::SuperAdmin),
                 Rule::prohibitedIf(fn (): bool => $actor?->role !== UserRole::SuperAdmin),
@@ -61,6 +61,7 @@ class StoreManagedAccountRequest extends FormRequest
             'lgu_id.required' => 'Select the LGU this administrator will manage.',
             'station_id.required' => 'Select the response station this chief will manage.',
             'station_id.exists' => 'The selected station does not belong to your LGU.',
+            'phone.regex' => 'Phone must be 11 digits and start with 09.',
         ];
     }
 
