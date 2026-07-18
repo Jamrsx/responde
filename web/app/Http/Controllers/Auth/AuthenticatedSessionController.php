@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use App\UserRole;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -30,8 +29,8 @@ class AuthenticatedSessionController extends Controller
             'user_id' => $user?->id,
         ]);
 
-        $defaultRoute = $user?->role === UserRole::SuperAdmin
-            ? route('admin.dashboard', absolute: false)
+        $defaultRoute = $user?->role
+            ? route($user->role->homeRouteName(), absolute: false)
             : route('home', absolute: false);
 
         return redirect()->intended($defaultRoute);

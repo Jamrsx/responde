@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['lgu_id', 'name', 'code', 'is_active'])]
+#[Fillable(['lgu_id', 'name', 'code', 'captain_user_id', 'is_active'])]
 class Barangay extends Model
 {
     /**
@@ -28,6 +28,12 @@ class Barangay extends Model
     public function lgu(): BelongsTo
     {
         return $this->belongsTo(Lgu::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function captain(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'captain_user_id');
     }
 
     /** @return HasMany<Station, $this> */

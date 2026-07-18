@@ -71,6 +71,18 @@ class User extends Authenticatable
         return $this->belongsTo(Station::class);
     }
 
+    /** @return HasMany<Barangay, $this> */
+    public function captainedBarangays(): HasMany
+    {
+        return $this->hasMany(Barangay::class, 'captain_user_id');
+    }
+
+    /** @return HasMany<Station, $this> */
+    public function ledStations(): HasMany
+    {
+        return $this->hasMany(Station::class, 'chief_user_id');
+    }
+
     /** @return HasMany<Emergency, $this> */
     public function reportedEmergencies(): HasMany
     {

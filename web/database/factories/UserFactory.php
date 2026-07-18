@@ -65,6 +65,15 @@ class UserFactory extends Factory
         ]);
     }
 
+    public function barangayCaptain(Lgu $lgu): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => UserRole::BarangayCaptain,
+            'lgu_id' => $lgu->id,
+            'station_id' => null,
+        ]);
+    }
+
     public function chief(Station $station): static
     {
         return $this->state(fn (array $attributes) => [

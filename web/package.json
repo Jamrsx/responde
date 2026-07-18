@@ -10,7 +10,9 @@
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",
         "lint:check": "eslint .",
-        "types:check": "tsc --noEmit"
+        "types:check": "tsc --noEmit",
+        "maps:barangays": "node scripts/build-ph-barangays.mjs",
+        "maps:municities": "node scripts/build-ph-municities.mjs"
     },
     "devDependencies": {
         "@eslint/js": "^9.19.0",

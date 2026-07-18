@@ -1,14 +1,25 @@
 <?php
 
-use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\LguAdminController;
 use App\Http\Controllers\Admin\LguController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\BarangayMapController;
+use App\Http\Controllers\Captain\DashboardController as CaptainDashboardController;
+use App\Http\Controllers\Captain\TanodOutpostController;
+use App\Http\Controllers\Lgu\BarangayController;
+use App\Http\Controllers\Lgu\ChiefController;
+use App\Http\Controllers\Lgu\DashboardController as LguDashboardController;
+use App\Http\Controllers\Lgu\StationController;
 use App\Http\Controllers\ManagedAccountController;
 use App\Http\Controllers\ProfileController;
 use App\UserRole;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+
+Route::get('/maps/barangays/{psgc}.json', [BarangayMapController::class, 'show'])
+    ->where('psgc', '\d{10}')
+    ->name('maps.barangays.show');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])
@@ -21,11 +32,12 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/', function () {
         $user = auth()->user();
 
-        if ($user?->role === UserRole::SuperAdmin) {
-            return redirect()->route('admin.dashboard');
-        }
-
-        return Inertia::render('welcome');
+        return match ($user?->role) {
+            UserRole::SuperAdmin => redirect()->route('admin.dashboard'),
+            UserRole::LguAdmin => redirect()->route('lgu.dashboard'),
+            UserRole::BarangayCaptain => redirect()->route('captain.dashboard'),
+            default => Inertia::render('welcome'),
+        };
     })->name('home');
 
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
@@ -46,7 +58,7 @@ Route::middleware('auth')->group(function (): void {
         ->name('managed-accounts.store');
 
     Route::middleware('super_admin')->prefix('admin')->group(function (): void {
-        Route::get('/', [DashboardController::class, 'index'])
+        Route::get('/', [AdminDashboardController::class, 'index'])
             ->name('admin.dashboard');
 
         Route::get('/lgus', [LguController::class, 'index'])
@@ -64,5 +76,54 @@ Route::middleware('auth')->group(function (): void {
 
         Route::get('/lgu-admins', [LguAdminController::class, 'index'])
             ->name('admin.lgu-admins.index');
+    });
+
+    Route::middleware('lgu_admin')->prefix('lgu')->group(function (): void {
+        Route::get('/', [LguDashboardController::class, 'index'])
+            ->name('lgu.dashboard');
+
+        Route::get('/barangays', [BarangayController::class, 'index'])
+            ->name('lgu.barangays.index');
+        Route::post('/barangays/import', [BarangayController::class, 'import'])
+            ->name('lgu.barangays.import');
+        Route::post('/barangays/captains', [BarangayController::class, 'storeCaptain'])
+            ->name('lgu.barangays.captains.store');
+        Route::put('/barangays/{barangay}/captain', [BarangayController::class, 'updateCaptain'])
+            ->name('lgu.barangays.captains.update');
+        Route::post('/barangays/{barangay}/captain/replace', [BarangayController::class, 'replaceCaptain'])
+            ->name('lgu.barangays.captains.replace');
+        Route::patch('/barangays/{barangay}/status', [BarangayController::class, 'toggleStatus'])
+            ->name('lgu.barangays.toggle-status');
+
+        Route::get('/stations', [StationController::class, 'index'])
+            ->name('lgu.stations.index');
+        Route::post('/stations', [StationController::class, 'store'])
+            ->name('lgu.stations.store');
+        Route::put('/stations/{station}', [StationController::class, 'update'])
+            ->name('lgu.stations.update');
+        Route::patch('/stations/{station}/approve', [StationController::class, 'approve'])
+            ->name('lgu.stations.approve');
+        Route::patch('/stations/{station}/reject', [StationController::class, 'reject'])
+            ->name('lgu.stations.reject');
+
+        Route::get('/chiefs', [ChiefController::class, 'index'])
+            ->name('lgu.chiefs.index');
+        Route::post('/chiefs', [ChiefController::class, 'store'])
+            ->name('lgu.chiefs.store');
+        Route::post('/chiefs/{chief}/replace', [ChiefController::class, 'replace'])
+            ->name('lgu.chiefs.replace');
+        Route::delete('/chiefs/{chief}', [ChiefController::class, 'deactivate'])
+            ->name('lgu.chiefs.deactivate');
+    });
+
+    Route::middleware('barangay_captain')->prefix('captain')->group(function (): void {
+        Route::get('/', [CaptainDashboardController::class, 'index'])
+            ->name('captain.dashboard');
+        Route::post('/outposts', [TanodOutpostController::class, 'store'])
+            ->name('captain.outposts.store');
+        Route::put('/outposts/{station}', [TanodOutpostController::class, 'update'])
+            ->name('captain.outposts.update');
+        Route::delete('/outposts/{station}', [TanodOutpostController::class, 'destroy'])
+            ->name('captain.outposts.destroy');
     });
 });

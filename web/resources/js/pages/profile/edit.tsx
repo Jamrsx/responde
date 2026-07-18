@@ -4,6 +4,8 @@ import type { FormEvent } from 'react';
 
 import FormField, { inputClassName } from '@/components/admin/FormField';
 import AdminLayout from '@/layouts/AdminLayout';
+import CaptainLayout from '@/layouts/CaptainLayout';
+import LguLayout from '@/layouts/LguLayout';
 
 type Profile = {
     name: string;
@@ -152,8 +154,15 @@ export default function EditProfile({ profile }: { profile: Profile }) {
         });
     };
 
+    const Layout =
+        profile.role === 'lgu_admin'
+            ? LguLayout
+            : profile.role === 'barangay_captain'
+              ? CaptainLayout
+              : AdminLayout;
+
     return (
-        <AdminLayout
+        <Layout
             title="My Profile"
             description="Manage your personal information and account security"
         >
@@ -461,6 +470,6 @@ export default function EditProfile({ profile }: { profile: Profile }) {
                     </section>
                 </div>
             </div>
-        </AdminLayout>
+        </Layout>
     );
 }

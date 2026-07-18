@@ -12,12 +12,15 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'lgu_id',
     'station_type_id',
     'barangay_id',
+    'chief_user_id',
+    'submitted_by_user_id',
     'name',
     'contact_number',
     'address',
     'latitude',
     'longitude',
     'status',
+    'approval_status',
 ])]
 class Station extends Model
 {
@@ -28,6 +31,7 @@ class Station extends Model
      */
     protected $attributes = [
         'status' => 'active',
+        'approval_status' => 'approved',
     ];
 
     protected function casts(): array
@@ -54,6 +58,18 @@ class Station extends Model
     public function barangay(): BelongsTo
     {
         return $this->belongsTo(Barangay::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function chief(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'chief_user_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function submittedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by_user_id');
     }
 
     /** @return HasMany<User, $this> */

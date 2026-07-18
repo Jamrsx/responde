@@ -19,7 +19,11 @@ class ProfileController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        $user->loadMissing(['lgu:id,name', 'station:id,name']);
+        $user->loadMissing([
+            'lgu:id,name',
+            'station:id,name',
+            'captainedBarangays:id,name,captain_user_id',
+        ]);
 
         return Inertia::render('profile/edit', [
             'profile' => [
@@ -31,7 +35,8 @@ class ProfileController extends Controller
                     : null,
                 'role' => $user->role->value,
                 'lgu_name' => $user->lgu?->name,
-                'station_name' => $user->station?->name,
+                'station_name' => $user->station?->name
+                    ?? $user->captainedBarangays->first()?->name,
             ],
         ]);
     }

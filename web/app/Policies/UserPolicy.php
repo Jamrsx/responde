@@ -27,7 +27,11 @@ class UserPolicy
         return match ($user->role) {
             UserRole::SuperAdmin => true,
             UserRole::LguAdmin => $model->lgu_id === $user->lgu_id
-                && in_array($model->role, [UserRole::Chief, UserRole::Staff], true),
+                && in_array($model->role, [
+                    UserRole::BarangayCaptain,
+                    UserRole::Chief,
+                    UserRole::Staff,
+                ], true),
             UserRole::Chief => $model->station_id === $user->station_id
                 && $model->role === UserRole::Staff,
             default => false,

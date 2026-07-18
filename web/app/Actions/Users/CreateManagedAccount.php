@@ -3,11 +3,13 @@
 namespace App\Actions\Users;
 
 use App\Models\AuditLog;
+use App\Models\Station;
 use App\Models\User;
 use App\UserRole;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class CreateManagedAccount
 {
@@ -40,7 +42,35 @@ class CreateManagedAccount
             throw new AuthorizationException('Your account is missing its required LGU or station assignment.');
         }
 
-        return DB::transaction(function () use ($actor, $data, $managedRole, $lguId, $stationId): User {
+        $station = null;
+
+        if ($managedRole === UserRole::Chief && $stationId !== null) {
+            $station = Station::query()
+                ->with('stationType:id,code')
+                ->whereKey($stationId)
+                ->where('lgu_id', $lguId)
+                ->first();
+
+            if ($station === null) {
+                throw ValidationException::withMessages([
+                    'station_id' => 'The selected station does not belong to your LGU.',
+                ]);
+            }
+
+            if ($station->stationType?->code === 'tanod') {
+                throw ValidationException::withMessages([
+                    'station_id' => 'Tanod outposts do not use station chief accounts.',
+                ]);
+            }
+
+            if ($station->chief_user_id !== null) {
+                throw ValidationException::withMessages([
+                    'station_id' => 'This station already has an active chief.',
+                ]);
+            }
+        }
+
+        return DB::transaction(function () use ($actor, $data, $managedRole, $lguId, $stationId, $station): User {
             $account = User::query()->create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -50,6 +80,10 @@ class CreateManagedAccount
                 'lgu_id' => $lguId,
                 'station_id' => $stationId,
             ]);
+
+            if ($station !== null) {
+                $station->update(['chief_user_id' => $account->id]);
+            }
 
             AuditLog::query()->create([
                 'user_id' => $actor->id,
