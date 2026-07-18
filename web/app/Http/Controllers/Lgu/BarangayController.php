@@ -57,7 +57,7 @@ class BarangayController extends Controller
             ],
             'barangays' => $barangays,
             'mapUrl' => $lgu->psgc_code
-                ? "/maps/barangays/{$lgu->psgc_code}.json"
+                ? route('map-data.barangays.show', ['psgc' => $lgu->psgc_code], absolute: false)
                 : null,
         ]);
     }

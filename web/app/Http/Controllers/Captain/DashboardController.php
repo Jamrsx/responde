@@ -55,7 +55,7 @@ class DashboardController extends Controller
                 'rejected' => $outposts->where('approval_status', 'rejected')->count(),
             ],
             'mapUrl' => $lgu->psgc_code
-                ? "/maps/barangays/{$lgu->psgc_code}.json"
+                ? route('map-data.barangays.show', ['psgc' => $lgu->psgc_code], absolute: false)
                 : null,
         ]);
     }

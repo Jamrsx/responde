@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\LguAdminController;
 use App\Http\Controllers\Admin\LguController;
+use App\Http\Controllers\Admin\MapController as AdminMapController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\BarangayMapController;
 use App\Http\Controllers\Captain\DashboardController as CaptainDashboardController;
@@ -12,14 +13,17 @@ use App\Http\Controllers\Lgu\ChiefController;
 use App\Http\Controllers\Lgu\DashboardController as LguDashboardController;
 use App\Http\Controllers\Lgu\StationController;
 use App\Http\Controllers\ManagedAccountController;
+use App\Http\Controllers\MapAssetController;
 use App\Http\Controllers\ProfileController;
 use App\UserRole;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/maps/barangays/{psgc}.json', [BarangayMapController::class, 'show'])
+Route::get('/map-data/barangays/{psgc}', [BarangayMapController::class, 'show'])
     ->where('psgc', '\d{10}')
-    ->name('maps.barangays.show');
+    ->name('map-data.barangays.show');
+Route::get('/map-data/municipalities', [MapAssetController::class, 'municipalities'])
+    ->name('map-data.municipalities');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])
@@ -76,6 +80,23 @@ Route::middleware('auth')->group(function (): void {
 
         Route::get('/lgu-admins', [LguAdminController::class, 'index'])
             ->name('admin.lgu-admins.index');
+
+        Route::get('/maps', [AdminMapController::class, 'index'])
+            ->name('admin.maps.index');
+        Route::post('/maps/sync', [AdminMapController::class, 'sync'])
+            ->middleware('throttle:6,1')
+            ->name('admin.maps.sync');
+        Route::post('/maps/download/start', [AdminMapController::class, 'startDownload'])
+            ->middleware('throttle:12,1')
+            ->name('admin.maps.download.start');
+        Route::post('/maps/download/batch', [AdminMapController::class, 'downloadBatch'])
+            ->middleware('throttle:120,1')
+            ->name('admin.maps.download.batch');
+        Route::post('/maps/download/cancel', [AdminMapController::class, 'cancelDownload'])
+            ->middleware('throttle:12,1')
+            ->name('admin.maps.download.cancel');
+        Route::get('/maps/status', [AdminMapController::class, 'status'])
+            ->name('admin.maps.status');
     });
 
     Route::middleware('lgu_admin')->prefix('lgu')->group(function (): void {

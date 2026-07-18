@@ -1,5 +1,5 @@
-// Builds public/maps/ph-municities.json — nationwide GeoJSON of Philippine
-// municipalities and cities for the Responde LGU map picker.
+// Builds and stores nationwide Philippine municipality/city GeoJSON directly
+// in the database for the Responde LGU map picker.
 //
 // Sources:
 // 1. faeldon/philippines-json-maps (municipality / component-city polygons)
@@ -8,7 +8,7 @@
 //
 // Run with: node scripts/build-ph-municities.mjs
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -281,15 +281,29 @@ for (const feature of features) {
 console.log(`Postal codes attached to ${withZip}/${features.length} LGUs.`);
 
 const collection = { type: 'FeatureCollection', features };
-const outputDir = join(ROOT, 'public', 'maps');
-
-mkdirSync(outputDir, { recursive: true });
-
-const outputPath = join(outputDir, 'ph-municities.json');
 const payload = JSON.stringify(collection);
 
-writeFileSync(outputPath, payload);
+const store = spawnSync(
+    'php',
+    ['artisan', 'maps:store-asset', 'ph-municities'],
+    {
+        cwd: ROOT,
+        input: payload,
+        encoding: 'utf8',
+        stdio: ['pipe', 'inherit', 'inherit'],
+        shell: process.platform === 'win32',
+        maxBuffer: 64 * 1024 * 1024,
+    },
+);
+
+if (store.error) {
+    throw store.error;
+}
+
+if (store.status !== 0) {
+    throw new Error(`Database map storage failed with exit code ${store.status}`);
+}
 
 console.log(
-    `Done. Wrote ${features.length} LGU polygons (+${added} HUC/ICC) (${(payload.length / 1024 / 1024).toFixed(1)} MB) to ${outputPath}`,
+    `Done. Stored ${features.length} LGU polygons (+${added} HUC/ICC) (${(payload.length / 1024 / 1024).toFixed(1)} MB) in the database.`,
 );

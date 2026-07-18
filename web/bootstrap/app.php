@@ -1,5 +1,7 @@
 <?php
 
+use App\Console\Commands\ImportMapFiles;
+use App\Console\Commands\StoreMapAsset;
 use App\Console\Commands\SyncBarangayMaps;
 use App\Http\Middleware\EnsureBarangayCaptain;
 use App\Http\Middleware\EnsureLguAdmin;
@@ -19,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withCommands([
+        ImportMapFiles::class,
+        StoreMapAsset::class,
         SyncBarangayMaps::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {

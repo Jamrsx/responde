@@ -199,7 +199,7 @@ export default function LguMapPicker({
 
         console.log('[Responde Admin] Loading PH LGU boundaries...');
 
-        fetch('/maps/ph-municities.json')
+        fetch('/map-data/municipalities')
             .then((response) => {
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);

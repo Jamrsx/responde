@@ -2,20 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\LguBarangayMap;
+use App\Models\MapAsset;
 use Illuminate\Http\Response;
 
-class BarangayMapController extends Controller
+class MapAssetController extends Controller
 {
-    public function show(string $psgc): Response
+    public function municipalities(): Response
     {
-        abort_unless(preg_match('/^\d{10}$/', $psgc) === 1, 404);
-
-        $map = LguBarangayMap::query()
-            ->where('psgc_code', $psgc)
+        $asset = MapAsset::query()
+            ->where('key', 'ph-municities')
             ->firstOrFail();
 
-        $etag = '"'.($map->source_hash ?: hash('sha256', $map->geojson)).'"';
+        $etag = '"'.($asset->source_hash ?: hash('sha256', $asset->geojson)).'"';
 
         if (request()->header('If-None-Match') === $etag) {
             return response('', 304, [
@@ -24,7 +22,7 @@ class BarangayMapController extends Controller
             ]);
         }
 
-        return response($map->geojson, 200, [
+        return response($asset->geojson, 200, [
             'Content-Type' => 'application/geo+json; charset=UTF-8',
             'Cache-Control' => 'public, max-age=86400',
             'ETag' => $etag,

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { destroy } from '@/actions/App/Http/Controllers/Auth/AuthenticatedSessionController';
+import MapDownloadToast from '@/components/admin/MapDownloadToast';
 import Modal from '@/components/admin/Modal';
 
 type AuthUser = {
@@ -65,6 +66,25 @@ const navItems: NavItem[] = [
                 strokeLinecap="round"
                 strokeLinejoin="round"
             />
+        ),
+    },
+    {
+        label: 'Maps',
+        href: '/admin/maps',
+        icon: (
+            <>
+                <path
+                    d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinejoin="round"
+                />
+                <path
+                    d="M9 3v15M15 6v15"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                />
+            </>
         ),
     },
 ];
@@ -443,6 +463,8 @@ export default function AdminLayout({
                     </div>
                 </main>
             </div>
+
+            <MapDownloadToast />
 
             <Modal
                 show={showLogoutConfirm}
