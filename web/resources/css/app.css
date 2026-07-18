@@ -8,4 +8,9 @@
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
+
+    /* Responde brand palette — softened orange, easier on the eyes than Tailwind's default orange */
+    --color-brand: #e0752e;
+    --color-brand-dark: #c25e1d;
+    --color-brand-light: #fbe9da;
 }
