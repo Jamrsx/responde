@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { destroy } from '@/actions/App/Http/Controllers/Auth/AuthenticatedSessionController';
 import Modal from '@/components/admin/Modal';
+import ScopedRealtimeUpdates from '@/components/realtime/ScopedRealtimeUpdates';
 
 type AuthUser = {
     name: string;
@@ -306,6 +307,7 @@ export default function PortalLayout({
 
     return (
         <div className="min-h-screen bg-slate-50 text-slate-950">
+            <ScopedRealtimeUpdates />
             <aside
                 className={`fixed inset-y-0 left-0 z-30 hidden border-r border-slate-200 bg-white transition-[width] duration-200 lg:block ${
                     sidebarCollapsed ? 'w-20' : 'w-64'

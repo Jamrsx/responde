@@ -7,6 +7,7 @@ use App\Http\Requests\Chief\RequestStationLocationUpdateRequest;
 use App\Models\AuditLog;
 use App\Models\Lgu;
 use App\Models\Station;
+use App\Support\ScopedUpdateSignal;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -53,6 +54,7 @@ class StationLocationController extends Controller
 
     public function store(
         RequestStationLocationUpdateRequest $request,
+        ScopedUpdateSignal $signals,
     ): RedirectResponse {
         /** @var Station $station */
         $station = $request->attributes->get('current_station');
@@ -105,6 +107,11 @@ class StationLocationController extends Controller
                 'location_update_note',
             ]),
         ]);
+
+        $signals->publishLgu(
+            (int) $station->lgu_id,
+            'station.location.requested',
+        );
 
         Log::info('Chief requested a station location update.', [
             'station_id' => $station->id,

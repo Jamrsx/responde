@@ -2,7 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\EmergencyAssignment;
+use App\Observers\EmergencyAssignmentObserver;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -24,6 +27,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+
+        EmergencyAssignment::observe(EmergencyAssignmentObserver::class);
+        Broadcast::routes(['middleware' => ['web', 'auth']]);
+        require base_path('routes/channels.php');
     }
 
     /**

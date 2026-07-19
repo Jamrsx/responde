@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Station;
 use App\Models\User;
+use App\Support\ScopedUpdateSignal;
 use App\UserRole;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -72,6 +73,24 @@ class HandleInertiaRequests extends Middleware
                 ->all();
         }
 
+        [$realtimeScope, $realtimeScopeId] = match ($user?->role) {
+            UserRole::LguAdmin => [
+                'lgu',
+                $user?->lgu_id !== null ? (int) $user->lgu_id : null,
+            ],
+            UserRole::Chief, UserRole::Staff => [
+                'station',
+                $user?->station_id !== null ? (int) $user->station_id : null,
+            ],
+            default => [null, null],
+        };
+        $realtimeVersion = $realtimeScope !== null && $realtimeScopeId !== null
+            ? app(ScopedUpdateSignal::class)->version(
+                $realtimeScope,
+                $realtimeScopeId,
+            )
+            : 'initial';
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
@@ -90,6 +109,15 @@ class HandleInertiaRequests extends Middleware
             'notifications' => [
                 'pending_location_updates' => $pendingLocationUpdates,
                 'pending_location_update_count' => count($pendingLocationUpdates),
+            ],
+            'realtime' => [
+                'scope' => $realtimeScope,
+                'scope_id' => $realtimeScopeId,
+                'channel' => $realtimeScope !== null && $realtimeScopeId !== null
+                    ? "private-{$realtimeScope}.{$realtimeScopeId}"
+                    : null,
+                'version' => $realtimeVersion,
+                'check_url' => route('updates.check', absolute: false),
             ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

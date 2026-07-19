@@ -19,6 +19,7 @@ use App\Http\Controllers\Lgu\StationController;
 use App\Http\Controllers\ManagedAccountController;
 use App\Http\Controllers\MapAssetController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ScopedUpdateController;
 use App\UserRole;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -51,6 +52,9 @@ Route::middleware('auth')->group(function (): void {
 
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
+    Route::get('/updates/check', ScopedUpdateController::class)
+        ->middleware('throttle:120,1')
+        ->name('updates.check');
 
     Route::get('/profile', [ProfileController::class, 'edit'])
         ->name('profile.edit');

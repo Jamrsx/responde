@@ -12,6 +12,7 @@ use App\Models\AuditLog;
 use App\Models\Barangay;
 use App\Models\Station;
 use App\Models\StationType;
+use App\Support\ScopedUpdateSignal;
 use App\Support\StationSatisfactionScore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -386,6 +387,7 @@ class StationController extends Controller
     public function approveLocationUpdate(
         Request $request,
         Station $station,
+        ScopedUpdateSignal $signals,
     ): RedirectResponse {
         $lgu = $this->currentLgu($request);
         $this->assertOwnedStation($station, $lgu->id);
@@ -425,6 +427,15 @@ class StationController extends Controller
             ]),
         ]);
 
+        $signals->publishStation(
+            $station->id,
+            'station.location.approved',
+        );
+        $signals->publishLgu(
+            (int) $station->lgu_id,
+            'station.location.approved',
+        );
+
         Log::info('LGU approved a station location update.', [
             'station_id' => $station->id,
             'actor_user_id' => $request->user()?->id,
@@ -439,6 +450,7 @@ class StationController extends Controller
     public function rejectLocationUpdate(
         Request $request,
         Station $station,
+        ScopedUpdateSignal $signals,
     ): RedirectResponse {
         $lgu = $this->currentLgu($request);
         $this->assertOwnedStation($station, $lgu->id);
@@ -471,6 +483,15 @@ class StationController extends Controller
                 'location_update_review_note',
             ]),
         ]);
+
+        $signals->publishStation(
+            $station->id,
+            'station.location.rejected',
+        );
+        $signals->publishLgu(
+            (int) $station->lgu_id,
+            'station.location.rejected',
+        );
 
         Log::info('LGU rejected a station location update.', [
             'station_id' => $station->id,
