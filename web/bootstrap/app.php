@@ -4,6 +4,7 @@ use App\Console\Commands\ImportMapFiles;
 use App\Console\Commands\StoreMapAsset;
 use App\Console\Commands\SyncBarangayMaps;
 use App\Http\Middleware\EnsureBarangayCaptain;
+use App\Http\Middleware\EnsureChief;
 use App\Http\Middleware\EnsureLguAdmin;
 use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -35,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'super_admin' => EnsureSuperAdmin::class,
             'lgu_admin' => EnsureLguAdmin::class,
             'barangay_captain' => EnsureBarangayCaptain::class,
+            'chief' => EnsureChief::class,
         ]);
 
         $middleware->redirectGuestsTo('/login');

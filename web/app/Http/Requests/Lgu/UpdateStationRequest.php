@@ -45,6 +45,8 @@ class UpdateStationRequest extends FormRequest
                     'generic',
                 ]),
             ],
+            'logo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:2048'],
+            'remove_logo' => ['sometimes', 'boolean'],
             'other_type_name' => ['nullable', 'string', 'max:255'],
             'barangay_id' => [
                 'nullable',
@@ -83,6 +85,9 @@ class UpdateStationRequest extends FormRequest
     {
         return [
             'contact_number.regex' => 'Contact number must be an 11-digit mobile number starting with 09.',
+            'logo.image' => 'Station logo must be an image file.',
+            'logo.mimes' => 'Station logo must be a JPG, PNG, or WebP file.',
+            'logo.max' => 'Station logo must be 2 MB or smaller.',
         ];
     }
 
@@ -97,6 +102,7 @@ class UpdateStationRequest extends FormRequest
         $contact = preg_replace('/\D+/', '', (string) $this->input('contact_number', ''));
         $this->merge([
             'contact_number' => $contact !== '' ? $contact : null,
+            'remove_logo' => $this->boolean('remove_logo'),
         ]);
     }
 }

@@ -18,6 +18,7 @@ return new class extends Migration
             $table->foreignId('lgu_id')->constrained('lgus')->cascadeOnDelete();
             $table->unsignedBigInteger('station_type_id')->index();
             $table->string('icon_key')->default('generic');
+            $table->string('logo_path')->nullable();
             $table->unsignedBigInteger('barangay_id')->nullable()->index();
             $table->string('name');
             $table->string('contact_number')->nullable();

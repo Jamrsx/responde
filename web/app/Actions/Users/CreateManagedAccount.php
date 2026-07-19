@@ -19,6 +19,7 @@ class CreateManagedAccount
      *     email: string,
      *     password: string,
      *     phone: string|null,
+     *     position_title?: string|null,
      *     lgu_id: int|null,
      *     station_id: int|null
      * }  $data
@@ -76,6 +77,7 @@ class CreateManagedAccount
                 'email' => $data['email'],
                 'password' => $data['password'],
                 'phone' => $data['phone'] ?? null,
+                'position_title' => $data['position_title'] ?? null,
                 'role' => $managedRole,
                 'lgu_id' => $lguId,
                 'station_id' => $stationId,
@@ -94,6 +96,7 @@ class CreateManagedAccount
                     'name' => $account->name,
                     'email' => $account->email,
                     'role' => $account->role->value,
+                    'position_title' => $account->position_title,
                     'lgu_id' => $account->lgu_id,
                     'station_id' => $account->station_id,
                 ],

@@ -48,6 +48,7 @@ class StoreStationRequest extends FormRequest
                     'generic',
                 ]),
             ],
+            'logo' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:2048'],
             'other_type_name' => ['nullable', 'string', 'max:255'],
             'barangay_id' => [
                 'nullable',
@@ -111,6 +112,9 @@ class StoreStationRequest extends FormRequest
     {
         return [
             'contact_number.regex' => 'Contact number must be an 11-digit mobile number starting with 09.',
+            'logo.image' => 'Station logo must be an image file.',
+            'logo.mimes' => 'Station logo must be a JPG, PNG, or WebP file.',
+            'logo.max' => 'Station logo must be 2 MB or smaller.',
             'chief_name.required' => 'Enter the station chief full name.',
             'chief_email.required' => 'Enter the station chief email address.',
             'chief_email.unique' => 'An account already uses this email address.',

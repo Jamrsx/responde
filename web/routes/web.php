@@ -8,6 +8,8 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\BarangayMapController;
 use App\Http\Controllers\Captain\DashboardController as CaptainDashboardController;
 use App\Http\Controllers\Captain\TanodOutpostController;
+use App\Http\Controllers\Chief\DashboardController as ChiefDashboardController;
+use App\Http\Controllers\Chief\StaffController as ChiefStaffController;
 use App\Http\Controllers\Lgu\BarangayController;
 use App\Http\Controllers\Lgu\ChiefController;
 use App\Http\Controllers\Lgu\DashboardController as LguDashboardController;
@@ -40,6 +42,7 @@ Route::middleware('auth')->group(function (): void {
             UserRole::SuperAdmin => redirect()->route('admin.dashboard'),
             UserRole::LguAdmin => redirect()->route('lgu.dashboard'),
             UserRole::BarangayCaptain => redirect()->route('captain.dashboard'),
+            UserRole::Chief => redirect()->route('chief.dashboard'),
             default => Inertia::render('welcome'),
         };
     })->name('home');
@@ -148,5 +151,17 @@ Route::middleware('auth')->group(function (): void {
             ->name('captain.outposts.update');
         Route::delete('/outposts/{station}', [TanodOutpostController::class, 'destroy'])
             ->name('captain.outposts.destroy');
+    });
+
+    Route::middleware('chief')->prefix('chief')->group(function (): void {
+        Route::get('/', [ChiefDashboardController::class, 'index'])
+            ->name('chief.dashboard');
+        Route::get('/staff', [ChiefStaffController::class, 'index'])
+            ->name('chief.staff.index');
+        Route::post('/staff', [ChiefStaffController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('chief.staff.store');
+        Route::delete('/staff/{staff}', [ChiefStaffController::class, 'destroy'])
+            ->name('chief.staff.destroy');
     });
 });

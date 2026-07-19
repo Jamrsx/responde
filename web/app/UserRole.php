@@ -36,6 +36,7 @@ enum UserRole: string
             self::SuperAdmin => 'admin.dashboard',
             self::LguAdmin => 'lgu.dashboard',
             self::BarangayCaptain => 'captain.dashboard',
+            self::Chief => 'chief.dashboard',
             default => 'home',
         };
     }

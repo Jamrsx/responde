@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'lgu_id',
     'station_type_id',
     'icon_key',
+    'logo_path',
     'barangay_id',
     'chief_user_id',
     'submitted_by_user_id',
@@ -91,5 +92,15 @@ class Station extends Model
     public function alertDeliveries(): HasMany
     {
         return $this->hasMany(AlertDelivery::class);
+    }
+
+    public function logoUrl(): ?string
+    {
+        if (! filled($this->logo_path)) {
+            return null;
+        }
+
+        // Relative path so markers work on any local host (Laragon / artisan serve).
+        return '/storage/'.ltrim((string) $this->logo_path, '/');
     }
 }

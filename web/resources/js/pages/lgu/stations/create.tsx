@@ -1,5 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import FormField, { inputClassName } from '@/components/admin/FormField';
@@ -9,6 +9,7 @@ import {
     StationIconPicker,
 } from '@/components/lgu/stationIcons';
 import type { StationIconKey } from '@/components/lgu/stationIcons';
+import StationLogoField from '@/components/lgu/StationLogoField';
 import StationPointMap from '@/components/lgu/StationPointMap';
 import LguLayout from '@/layouts/LguLayout';
 
@@ -21,6 +22,7 @@ type ExistingStation = {
     longitude: string;
     approval_status: string;
     icon_key: StationIconKey;
+    logo_url: string | null;
     type: string | null;
     type_code: string | null;
 };
@@ -73,6 +75,7 @@ export default function LguStationsCreate({
                     station.icon_key,
                     station.type_code,
                 ),
+                logoUrl: station.logo_url,
                 color:
                     station.approval_status === 'pending'
                         ? '#d97706'
@@ -86,6 +89,7 @@ export default function LguStationsCreate({
     const form = useForm({
         station_type_id: String(stationTypes[0]?.id ?? ''),
         icon_key: defaultStationIcon(stationTypes[0]?.code),
+        logo: null as File | null,
         other_type_name: '',
         barangay_id: '',
         name: '',
@@ -100,6 +104,16 @@ export default function LguStationsCreate({
         set_chief_password: false,
         chief_password: '',
     });
+
+    const [mapLogoUrl, setMapLogoUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (mapLogoUrl) {
+                URL.revokeObjectURL(mapLogoUrl);
+            }
+        };
+    }, [mapLogoUrl]);
 
     const selectedType = stationTypes.find(
         (type) => String(type.id) === String(form.data.station_type_id),
@@ -155,8 +169,19 @@ export default function LguStationsCreate({
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
-        console.log('[Responde LGU] Creating station from page', form.data);
-        form.post('/lgu/stations');
+        console.log('[Responde LGU] Creating station from page', {
+            ...form.data,
+            logo: form.data.logo
+                ? {
+                      name: form.data.logo.name,
+                      size: form.data.logo.size,
+                      type: form.data.logo.type,
+                  }
+                : null,
+        });
+        form.post('/lgu/stations', {
+            forceFormData: true,
+        });
     };
 
     return (
@@ -241,6 +266,7 @@ export default function LguStationsCreate({
                             selectedIconKey={
                                 form.data.icon_key as StationIconKey
                             }
+                            selectedLogoUrl={mapLogoUrl}
                             focusPosition={locationFocus}
                             selected={
                                 form.data.latitude && form.data.longitude
@@ -341,6 +367,23 @@ export default function LguStationsCreate({
                                 {form.errors.icon_key}
                             </p>
                         )}
+
+                        <StationLogoField
+                            id="create-station-logo"
+                            error={form.errors.logo}
+                            onFileChange={(file) => {
+                                form.setData('logo', file);
+                                setMapLogoUrl((previous) => {
+                                    if (previous) {
+                                        URL.revokeObjectURL(previous);
+                                    }
+
+                                    return file
+                                        ? URL.createObjectURL(file)
+                                        : null;
+                                });
+                            }}
+                        />
 
                         {isOtherType && (
                             <FormField

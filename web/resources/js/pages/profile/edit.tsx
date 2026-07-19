@@ -5,6 +5,7 @@ import type { FormEvent } from 'react';
 import FormField, { inputClassName } from '@/components/admin/FormField';
 import AdminLayout from '@/layouts/AdminLayout';
 import CaptainLayout from '@/layouts/CaptainLayout';
+import ChiefLayout from '@/layouts/ChiefLayout';
 import LguLayout from '@/layouts/LguLayout';
 
 type Profile = {
@@ -12,6 +13,7 @@ type Profile = {
     email: string;
     phone: string | null;
     profile_photo_url: string | null;
+    station_logo_url: string | null;
     role: string;
     lgu_name: string | null;
     station_name: string | null;
@@ -95,7 +97,12 @@ export default function EditProfile({ profile }: { profile: Profile }) {
         };
     }, [photoPreview]);
 
-    const displayedPhoto = photoPreview ?? profile.profile_photo_url;
+    const usesStationLogo =
+        profile.role === 'chief' && profile.station_logo_url !== null;
+    const displayedPhoto =
+        profile.station_logo_url ??
+        photoPreview ??
+        profile.profile_photo_url;
 
     const selectPhoto = (file: File | null) => {
         if (photoPreview) {
@@ -159,7 +166,9 @@ export default function EditProfile({ profile }: { profile: Profile }) {
             ? LguLayout
             : profile.role === 'barangay_captain'
               ? CaptainLayout
-              : AdminLayout;
+              : profile.role === 'chief'
+                ? ChiefLayout
+                : AdminLayout;
 
     return (
         <Layout
@@ -207,48 +216,71 @@ export default function EditProfile({ profile }: { profile: Profile }) {
                                     source={displayedPhoto}
                                 />
                                 <div className="min-w-0 flex-1">
-                                    <label
-                                        htmlFor="profile-photo"
-                                        className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand"
-                                    >
-                                        Choose photo
-                                        <input
-                                            id="profile-photo"
-                                            type="file"
-                                            accept="image/jpeg,image/png,image/webp"
-                                            className="sr-only"
-                                            onChange={(event) =>
-                                                selectPhoto(
-                                                    event.target.files?.[0] ??
-                                                        null,
-                                                )
-                                            }
-                                        />
-                                    </label>
-                                    {(profile.profile_photo_url ||
-                                        photoPreview) && (
-                                        <button
-                                            type="button"
-                                            onClick={
-                                                photoPreview
-                                                    ? () => selectPhoto(null)
-                                                    : removePhoto
-                                            }
-                                            className="ml-2 min-h-11 rounded-lg px-3 text-sm font-semibold text-red-600 transition hover:bg-red-50"
-                                        >
-                                            Remove
-                                        </button>
-                                    )}
-                                    <p className="mt-2 text-xs text-slate-500">
-                                        JPG, PNG, or WebP. Maximum 2 MB.
-                                    </p>
-                                    {profileForm.errors.profile_photo && (
-                                        <p
-                                            role="alert"
-                                            className="mt-1 text-sm text-red-600"
-                                        >
-                                            {profileForm.errors.profile_photo}
-                                        </p>
+                                    {usesStationLogo ? (
+                                        <>
+                                            <p className="text-sm font-semibold text-slate-800">
+                                                Official station logo
+                                            </p>
+                                            <p className="mt-1 text-xs text-slate-500">
+                                                Your LGU manages this image. Any
+                                                station logo change will update
+                                                your account automatically.
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <label
+                                                htmlFor="profile-photo"
+                                                className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand"
+                                            >
+                                                Choose photo
+                                                <input
+                                                    id="profile-photo"
+                                                    type="file"
+                                                    accept="image/jpeg,image/png,image/webp"
+                                                    className="sr-only"
+                                                    onChange={(event) =>
+                                                        selectPhoto(
+                                                            event.target
+                                                                .files?.[0] ??
+                                                                null,
+                                                        )
+                                                    }
+                                                />
+                                            </label>
+                                            {(profile.profile_photo_url ||
+                                                photoPreview) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={
+                                                        photoPreview
+                                                            ? () =>
+                                                                  selectPhoto(
+                                                                      null,
+                                                                  )
+                                                            : removePhoto
+                                                    }
+                                                    className="ml-2 min-h-11 rounded-lg px-3 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                                                >
+                                                    Remove
+                                                </button>
+                                            )}
+                                            <p className="mt-2 text-xs text-slate-500">
+                                                JPG, PNG, or WebP. Maximum 2 MB.
+                                            </p>
+                                            {profileForm.errors
+                                                .profile_photo && (
+                                                <p
+                                                    role="alert"
+                                                    className="mt-1 text-sm text-red-600"
+                                                >
+                                                    {
+                                                        profileForm.errors
+                                                            .profile_photo
+                                                    }
+                                                </p>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </div>

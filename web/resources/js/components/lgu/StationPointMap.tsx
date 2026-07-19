@@ -24,6 +24,7 @@ type StationMarker = {
     longitude: number;
     color?: string;
     iconKey?: StationIconKey;
+    logoUrl?: string | null;
 };
 
 function FitMarkers({ markers }: { markers: StationMarker[] }) {
@@ -157,19 +158,37 @@ function LockToBoundary({
     return null;
 }
 
-const markerIcon = (color = '#e0752e', iconKey: StationIconKey = 'generic') =>
-    L.divIcon({
+const markerIcon = (
+    color = '#e0752e',
+    iconKey: StationIconKey = 'generic',
+    logoUrl?: string | null,
+) => {
+    const safeLogoUrl = logoUrl
+        ? logoUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+        : null;
+    const inner = safeLogoUrl
+        ? `<img src="${safeLogoUrl}" alt="" style="width:34px;height:34px;border-radius:9999px;object-fit:cover;background:#fff" />`
+        : `<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">${stationMarkerSvg(iconKey)}</svg>`;
+
+    // Badge with a pointer tail so the pin clearly marks the exact spot.
+    return L.divIcon({
         className: 'leaflet-div-icon responde-station-marker',
-        html: `<div style="display:flex;width:34px;height:34px;align-items:center;justify-content:center;border-radius:9999px;background:${color};border:2px solid white;box-shadow:0 2px 7px rgba(0,0,0,.35)"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${stationMarkerSvg(iconKey)}</svg></div>`,
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
+        html: `<div style="display:flex;flex-direction:column;align-items:center;width:46px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.45))">
+            <div style="display:flex;width:46px;height:46px;align-items:center;justify-content:center;border-radius:9999px;background:${color};border:3px solid white">${inner}</div>
+            <div style="width:0;height:0;margin-top:-2px;border-left:8px solid transparent;border-right:8px solid transparent;border-top:12px solid ${color}"></div>
+        </div>`,
+        iconSize: [46, 58],
+        iconAnchor: [23, 58],
+        tooltipAnchor: [0, -50],
     });
+};
 
 export default function StationPointMap({
     center,
     markers,
     selected,
     selectedIconKey = 'generic',
+    selectedLogoUrl = null,
     focusMarkerId = null,
     focusPosition = null,
     onPick,
@@ -184,6 +203,7 @@ export default function StationPointMap({
     markers: StationMarker[];
     selected?: { latitude: number; longitude: number } | null;
     selectedIconKey?: StationIconKey;
+    selectedLogoUrl?: string | null;
     focusMarkerId?: number | string | null;
     focusPosition?: {
         latitude: number;
@@ -308,7 +328,11 @@ export default function StationPointMap({
                     <Marker
                         key={marker.id}
                         position={[marker.latitude, marker.longitude]}
-                        icon={markerIcon(marker.color, marker.iconKey)}
+                        icon={markerIcon(
+                            marker.color,
+                            marker.iconKey,
+                            marker.logoUrl,
+                        )}
                         title={marker.name}
                         eventHandlers={
                             onMarkerClick
@@ -324,7 +348,7 @@ export default function StationPointMap({
                                 : undefined
                         }
                     >
-                        <Tooltip direction="top" offset={[0, -16]}>
+                        <Tooltip direction="top" offset={[0, -52]}>
                             {marker.name}
                         </Tooltip>
                     </Marker>
@@ -332,7 +356,11 @@ export default function StationPointMap({
                 {selected && (
                     <Marker
                         position={[selected.latitude, selected.longitude]}
-                        icon={markerIcon('#2563eb', selectedIconKey)}
+                        icon={markerIcon(
+                            '#2563eb',
+                            selectedIconKey,
+                            selectedLogoUrl,
+                        )}
                     />
                 )}
                 {onPick && (

@@ -34,6 +34,7 @@ type Station = {
     type: string | null;
     type_code: string | null;
     icon_key: StationIconKey;
+    logo_url: string | null;
     barangay: string | null;
     address: string | null;
     latitude: string | null;
@@ -310,6 +311,7 @@ export default function LguChiefsIndex({
                         station.icon_key,
                         station.type_code,
                     ),
+                    logoUrl: station.logo_url,
                     color:
                         selectedStationId === station.id
                             ? '#2563eb'

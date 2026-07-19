@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
+use App\UserRole;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -35,11 +37,35 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        /** @var User|null $user */
+        $user = $request->user();
+
+        if ($user?->role === UserRole::Chief) {
+            $user->loadMissing('station:id,logo_path');
+        }
+
+        $avatarUrl = $user?->role === UserRole::Chief
+            ? $user->station?->logoUrl()
+            : null;
+
+        if ($avatarUrl === null && filled($user?->profile_photo_path)) {
+            $avatarUrl = '/storage/'.ltrim((string) $user->profile_photo_path, '/');
+        }
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user
+                    ? [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'role' => $user->role->value,
+                        'profile_photo_path' => $user->profile_photo_path,
+                        'avatar_url' => $avatarUrl,
+                    ]
+                    : null,
             ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

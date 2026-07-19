@@ -12,6 +12,7 @@ import {
     stationIconLabel,
 } from '@/components/lgu/stationIcons';
 import type { StationIconKey } from '@/components/lgu/stationIcons';
+import StationLogoField from '@/components/lgu/StationLogoField';
 import StationPointMap from '@/components/lgu/StationPointMap';
 import LguLayout from '@/layouts/LguLayout';
 
@@ -28,11 +29,18 @@ type Station = {
     approval_status: string;
     station_type_id: number;
     icon_key: StationIconKey;
+    logo_url: string | null;
     barangay_id: number | null;
     other_type_name: string | null;
     type: string | null;
     type_code: string | null;
     barangay: string | null;
+    satisfaction: {
+        score: number;
+        average_rating: number | null;
+        rating_count: number;
+        has_ratings: boolean;
+    };
     chief: { id: number; name: string; email: string } | null;
 };
 
@@ -53,6 +61,8 @@ type Props = {
 const emptyForm = {
     station_type_id: '',
     icon_key: 'generic' as StationIconKey,
+    logo: null as File | null,
+    remove_logo: false,
     other_type_name: '',
     barangay_id: '',
     name: '',
@@ -109,6 +119,15 @@ export default function LguStationsIndex({
     const stationRefs = useRef<Record<number, HTMLLIElement | null>>({});
     const mapSectionRef = useRef<HTMLElement | null>(null);
     const form = useForm(emptyForm);
+    const [mapLogoUrl, setMapLogoUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (mapLogoUrl) {
+                URL.revokeObjectURL(mapLogoUrl);
+            }
+        };
+    }, [mapLogoUrl]);
 
     const center = useMemo<[number, number]>(() => {
         if (lgu.latitude && lgu.longitude) {
@@ -163,6 +182,7 @@ export default function LguStationsIndex({
                         station.icon_key,
                         station.type_code,
                     ),
+                    logoUrl: station.logo_url,
                     color:
                         selectedStationId === station.id
                             ? '#2563eb'
@@ -219,6 +239,8 @@ export default function LguStationsIndex({
         form.setData({
             station_type_id: String(station.station_type_id),
             icon_key: resolveStationIcon(station.icon_key, station.type_code),
+            logo: null,
+            remove_logo: false,
             other_type_name: station.other_type_name ?? '',
             barangay_id: station.barangay_id ? String(station.barangay_id) : '',
             name: station.name,
@@ -227,6 +249,13 @@ export default function LguStationsIndex({
             latitude: String(station.latitude),
             longitude: String(station.longitude),
             status: station.status,
+        });
+        setMapLogoUrl((previous) => {
+            if (previous) {
+                URL.revokeObjectURL(previous);
+            }
+
+            return null;
         });
         form.clearErrors();
         setShowForm(true);
@@ -240,27 +269,43 @@ export default function LguStationsIndex({
             return;
         }
 
-        console.log('[Responde LGU] Updating station', form.data);
+        console.log('[Responde LGU] Updating station', {
+            ...form.data,
+            logo: form.data.logo
+                ? {
+                      name: form.data.logo.name,
+                      size: form.data.logo.size,
+                      type: form.data.logo.type,
+                  }
+                : null,
+        });
 
-        router.put(
-            `/lgu/stations/${editing.id}`,
-            {
-                ...form.data,
-                station_type_id: Number(form.data.station_type_id),
-                barangay_id: form.data.barangay_id
-                    ? Number(form.data.barangay_id)
-                    : null,
-                latitude: Number(form.data.latitude),
-                longitude: Number(form.data.longitude),
+        form.transform((data) => ({
+            ...data,
+            station_type_id: Number(data.station_type_id),
+            barangay_id: data.barangay_id ? Number(data.barangay_id) : null,
+            latitude: Number(data.latitude),
+            longitude: Number(data.longitude),
+            remove_logo: data.remove_logo ? 1 : 0,
+            _method: 'put',
+        }));
+
+        form.post(`/lgu/stations/${editing.id}`, {
+            forceFormData: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                setShowForm(false);
+                setEditing(null);
+                form.reset();
+                setMapLogoUrl((previous) => {
+                    if (previous) {
+                        URL.revokeObjectURL(previous);
+                    }
+
+                    return null;
+                });
             },
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    setShowForm(false);
-                    setEditing(null);
-                },
-            },
-        );
+        });
     };
 
     const selectedBarangayPsgc = barangays.find(
@@ -377,6 +422,17 @@ export default function LguStationsIndex({
                                     .filter(Boolean)
                                     .join(' · ') || 'Station details'}
                             </p>
+                            <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs text-slate-700">
+                                <span className="font-bold text-brand-dark">
+                                    {selectedStation.satisfaction.score} / 100
+                                </span>
+                                <span>
+                                    Emergency Response Score
+                                    {selectedStation.satisfaction.has_ratings
+                                        ? ` · ${selectedStation.satisfaction.rating_count} public rating${selectedStation.satisfaction.rating_count === 1 ? '' : 's'}`
+                                        : ' · No ratings yet'}
+                                </span>
+                            </p>
                             <p className="mt-2 text-xs font-semibold text-blue-700">
                                 Selected on map
                             </p>
@@ -409,21 +465,33 @@ export default function LguStationsIndex({
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex min-w-0 items-start gap-3">
                                             <span
-                                                className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700"
-                                                title={stationIconLabel(
-                                                    resolveStationIcon(
-                                                        station.icon_key,
-                                                        station.type_code,
-                                                    ),
-                                                )}
+                                                className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-700"
+                                                title={
+                                                    station.logo_url
+                                                        ? 'Official station logo'
+                                                        : stationIconLabel(
+                                                              resolveStationIcon(
+                                                                  station.icon_key,
+                                                                  station.type_code,
+                                                              ),
+                                                          )
+                                                }
                                             >
-                                                <StationIcon
-                                                    iconKey={resolveStationIcon(
-                                                        station.icon_key,
-                                                        station.type_code,
-                                                    )}
-                                                    className="h-5 w-5"
-                                                />
+                                                {station.logo_url ? (
+                                                    <img
+                                                        src={station.logo_url}
+                                                        alt=""
+                                                        className="h-full w-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <StationIcon
+                                                        iconKey={resolveStationIcon(
+                                                            station.icon_key,
+                                                            station.type_code,
+                                                        )}
+                                                        className="h-5 w-5"
+                                                    />
+                                                )}
                                             </span>
                                             <div className="min-w-0">
                                                 <p className="truncate text-sm font-semibold text-slate-800">
@@ -445,6 +513,24 @@ export default function LguStationsIndex({
                                                           ? 'Tanod outpost'
                                                           : 'No chief assigned'}
                                                 </p>
+                                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                                    <span className="inline-flex rounded-lg bg-brand-light px-2 py-1 text-xs font-bold text-brand-dark">
+                                                        {
+                                                            station
+                                                                .satisfaction
+                                                                .score
+                                                        }{' '}
+                                                        / 100
+                                                    </span>
+                                                    <span className="text-[11px] text-slate-500">
+                                                        Emergency Response
+                                                        Score
+                                                        {station.satisfaction
+                                                            .has_ratings
+                                                            ? ` · ${station.satisfaction.rating_count} rating${station.satisfaction.rating_count === 1 ? '' : 's'}`
+                                                            : ' · No ratings yet'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                         <span
@@ -542,6 +628,12 @@ export default function LguStationsIndex({
                         }
                         markers={[]}
                         selectedIconKey={form.data.icon_key}
+                        selectedLogoUrl={
+                            mapLogoUrl ??
+                            (form.data.remove_logo
+                                ? null
+                                : (editing?.logo_url ?? null))
+                        }
                         selected={
                             form.data.latitude && form.data.longitude
                                 ? {
@@ -617,6 +709,44 @@ export default function LguStationsIndex({
                                     {form.errors.icon_key}
                                 </p>
                             )}
+                        </div>
+                        <div className="sm:col-span-2">
+                            <StationLogoField
+                                id="edit-station-logo"
+                                currentUrl={editing?.logo_url}
+                                error={form.errors.logo}
+                                removeRequested={form.data.remove_logo}
+                                onFileChange={(file) => {
+                                    form.setData((data) => ({
+                                        ...data,
+                                        logo: file,
+                                        remove_logo: false,
+                                    }));
+                                    setMapLogoUrl((previous) => {
+                                        if (previous) {
+                                            URL.revokeObjectURL(previous);
+                                        }
+
+                                        return file
+                                            ? URL.createObjectURL(file)
+                                            : null;
+                                    });
+                                }}
+                                onRemoveCurrent={() => {
+                                    form.setData((data) => ({
+                                        ...data,
+                                        logo: null,
+                                        remove_logo: !data.remove_logo,
+                                    }));
+                                    setMapLogoUrl((previous) => {
+                                        if (previous) {
+                                            URL.revokeObjectURL(previous);
+                                        }
+
+                                        return null;
+                                    });
+                                }}
+                            />
                         </div>
                         <FormField label="Barangay" htmlFor="station-barangay">
                             <select

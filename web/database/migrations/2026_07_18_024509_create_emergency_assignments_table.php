@@ -23,6 +23,9 @@ return new class extends Migration
             $table->timestamp('notified_at')->nullable();
             $table->timestamp('accepted_at')->nullable();
             $table->timestamp('completed_at')->nullable();
+            $table->unsignedTinyInteger('public_rating')->nullable();
+            $table->text('public_feedback')->nullable();
+            $table->timestamp('rated_at')->nullable();
             $table->timestamps();
 
             $table->unique(['emergency_id', 'station_id']);

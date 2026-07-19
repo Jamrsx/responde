@@ -21,7 +21,7 @@ class ProfileController extends Controller
         $user = $request->user();
         $user->loadMissing([
             'lgu:id,name',
-            'station:id,name',
+            'station:id,name,logo_path',
             'captainedBarangays:id,name,captain_user_id',
         ]);
 
@@ -31,7 +31,10 @@ class ProfileController extends Controller
                 'email' => $user->email,
                 'phone' => $user->phone,
                 'profile_photo_url' => $user->profile_photo_path
-                    ? Storage::disk('public')->url($user->profile_photo_path)
+                    ? '/storage/'.ltrim($user->profile_photo_path, '/')
+                    : null,
+                'station_logo_url' => $user->role === \App\UserRole::Chief
+                    ? $user->station?->logoUrl()
                     : null,
                 'role' => $user->role->value,
                 'lgu_name' => $user->lgu?->name,

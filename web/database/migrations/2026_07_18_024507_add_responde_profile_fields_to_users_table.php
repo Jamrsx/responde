@@ -15,7 +15,8 @@ return new class extends Migration
             // super_admin | lgu_admin | chief | staff | civilian
             $table->string('role')->default('civilian')->after('email')->index();
             $table->string('phone')->nullable()->after('role');
-            $table->string('profile_photo_path')->nullable()->after('phone');
+            $table->string('position_title')->nullable()->after('phone');
+            $table->string('profile_photo_path')->nullable()->after('position_title');
             $table->foreignId('lgu_id')->nullable()->after('profile_photo_path')->constrained('lgus')->nullOnDelete();
             $table->foreignId('station_id')->nullable()->after('lgu_id')->constrained('stations')->nullOnDelete();
             $table->softDeletes();
@@ -31,7 +32,7 @@ return new class extends Migration
             $table->dropSoftDeletes();
             $table->dropConstrainedForeignId('station_id');
             $table->dropConstrainedForeignId('lgu_id');
-            $table->dropColumn(['role', 'phone', 'profile_photo_path']);
+            $table->dropColumn(['role', 'phone', 'position_title', 'profile_photo_path']);
         });
     }
 };

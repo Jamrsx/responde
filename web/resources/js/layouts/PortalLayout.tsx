@@ -10,6 +10,7 @@ type AuthUser = {
     email: string;
     role: string;
     profile_photo_path: string | null;
+    avatar_url: string | null;
 };
 
 type SharedPageProps = {
@@ -114,9 +115,7 @@ export default function PortalLayout({
         return window.localStorage.getItem(storageKey) === 'true';
     });
     const currentPath = usePage().url.split('?')[0];
-    const photoUrl = auth.user?.profile_photo_path
-        ? `/storage/${auth.user.profile_photo_path}`
-        : null;
+    const photoUrl = auth.user?.avatar_url ?? null;
     const initial = auth.user?.name?.trim().charAt(0).toUpperCase() || 'U';
 
     useEffect(() => {

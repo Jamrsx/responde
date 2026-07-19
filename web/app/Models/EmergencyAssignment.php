@@ -16,6 +16,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'notified_at',
     'accepted_at',
     'completed_at',
+    'public_rating',
+    'public_feedback',
+    'rated_at',
 ])]
 class EmergencyAssignment extends Model
 {
@@ -33,6 +36,8 @@ class EmergencyAssignment extends Model
             'notified_at' => 'datetime',
             'accepted_at' => 'datetime',
             'completed_at' => 'datetime',
+            'public_rating' => 'integer',
+            'rated_at' => 'datetime',
         ];
     }
 

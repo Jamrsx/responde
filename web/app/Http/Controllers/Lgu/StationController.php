@@ -12,12 +12,15 @@ use App\Models\AuditLog;
 use App\Models\Barangay;
 use App\Models\Station;
 use App\Models\StationType;
+use App\Support\StationSatisfactionScore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -37,6 +40,16 @@ class StationController extends Controller
                 'stationType:id,name,code',
                 'barangay:id,name',
                 'chief:id,name,email',
+            ])
+            ->withAvg([
+                'emergencyAssignments as public_rating_average' => fn ($query) => $query
+                    ->where('status', 'completed')
+                    ->whereNotNull('public_rating'),
+            ], 'public_rating')
+            ->withCount([
+                'emergencyAssignments as public_rating_count' => fn ($query) => $query
+                    ->where('status', 'completed')
+                    ->whereNotNull('public_rating'),
             ])
             ->where('lgu_id', $lgu->id)
             ->latest()
@@ -81,6 +94,7 @@ class StationController extends Controller
                 'longitude' => $station->longitude,
                 'approval_status' => $station->approval_status,
                 'icon_key' => $this->resolveIconKey($station),
+                'logo_url' => $station->logoUrl(),
                 'type' => $station->stationType?->name,
                 'type_code' => $station->stationType?->code,
             ]);
@@ -120,18 +134,21 @@ class StationController extends Controller
         abort_if($actor === null, 403);
 
         $this->assertBarangayBelongsToLgu($request->integer('barangay_id') ?: null, $lgu->id);
-        $validated = $request->validated();
+        $validated = $request->safe()->except(['logo']);
+        $logoPath = $this->storeStationLogo($request->file('logo'));
 
         try {
             $station = DB::transaction(function () use (
                 $actor,
                 $lgu,
                 $validated,
+                $logoPath,
                 $createStationChiefAccount,
             ): Station {
                 $station = Station::query()->create([
                     'station_type_id' => $validated['station_type_id'],
                     'icon_key' => $validated['icon_key'],
+                    'logo_path' => $logoPath,
                     'other_type_name' => $validated['other_type_name'] ?? null,
                     'barangay_id' => $validated['barangay_id'] ?? null,
                     'name' => $validated['name'],
@@ -154,6 +171,7 @@ class StationController extends Controller
                         'name',
                         'station_type_id',
                         'icon_key',
+                        'logo_path',
                         'other_type_name',
                         'barangay_id',
                         'latitude',
@@ -201,6 +219,10 @@ class StationController extends Controller
                 return $station;
             });
         } catch (Throwable $exception) {
+            if ($logoPath !== null) {
+                Storage::disk('public')->delete($logoPath);
+            }
+
             report($exception);
             Log::error('Station and chief creation failed.', [
                 'actor_user_id' => $actor->id,
@@ -252,6 +274,7 @@ class StationController extends Controller
             'name',
             'station_type_id',
             'icon_key',
+            'logo_path',
             'other_type_name',
             'barangay_id',
             'latitude',
@@ -260,7 +283,26 @@ class StationController extends Controller
             'approval_status',
         ]);
 
-        $station->update($request->validated());
+        $data = $request->safe()->except(['logo', 'remove_logo']);
+        $previousLogoPath = $station->logo_path;
+        $newLogoPath = null;
+
+        if ($request->hasFile('logo')) {
+            $newLogoPath = $this->storeStationLogo($request->file('logo'));
+            $data['logo_path'] = $newLogoPath;
+        } elseif ($request->boolean('remove_logo')) {
+            $data['logo_path'] = null;
+        }
+
+        $station->update($data);
+
+        if (
+            ($newLogoPath !== null || $request->boolean('remove_logo'))
+            && filled($previousLogoPath)
+            && $previousLogoPath !== $station->logo_path
+        ) {
+            Storage::disk('public')->delete($previousLogoPath);
+        }
 
         AuditLog::query()->create([
             'user_id' => $request->user()?->id,
@@ -274,6 +316,8 @@ class StationController extends Controller
         Log::info('LGU station updated.', [
             'station_id' => $station->id,
             'actor_user_id' => $request->user()?->id,
+            'logo_replaced' => $newLogoPath !== null,
+            'logo_removed' => $request->boolean('remove_logo') && $newLogoPath === null,
         ]);
 
         return back()->with('success', "{$station->name} was updated successfully.");
@@ -347,6 +391,11 @@ class StationController extends Controller
         $typeLabel = $station->stationType?->code === 'other' && filled($station->other_type_name)
             ? "Other · {$station->other_type_name}"
             : $station->stationType?->name;
+        $ratingAverage = $station->getAttribute('public_rating_average');
+        $satisfaction = StationSatisfactionScore::fromAverage(
+            $ratingAverage !== null ? (float) $ratingAverage : null,
+            (int) $station->getAttribute('public_rating_count'),
+        );
 
         return [
             'id' => $station->id,
@@ -360,10 +409,12 @@ class StationController extends Controller
             'station_type_id' => $station->station_type_id,
             'barangay_id' => $station->barangay_id,
             'icon_key' => $this->resolveIconKey($station),
+            'logo_url' => $station->logoUrl(),
             'other_type_name' => $station->other_type_name,
             'type' => $typeLabel,
             'type_code' => $station->stationType?->code,
             'barangay' => $station->barangay?->name,
+            'satisfaction' => $satisfaction,
             'chief' => $station->chief
                 ? [
                     'id' => $station->chief->id,
@@ -385,6 +436,18 @@ class StationController extends Controller
             ->orderByRaw("CASE WHEN code = 'other' THEN 1 ELSE 0 END")
             ->orderBy('name')
             ->get(['id', 'name', 'code']);
+    }
+
+    private function storeStationLogo(?UploadedFile $logo): ?string
+    {
+        if ($logo === null) {
+            return null;
+        }
+
+        $path = $logo->store('station-logos', 'public');
+        Log::info('Station logo stored.', ['path' => $path]);
+
+        return $path;
     }
 
     private function resolveIconKey(Station $station): string

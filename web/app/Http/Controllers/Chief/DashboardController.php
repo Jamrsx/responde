@@ -1,0 +1,89 @@
+<?php
+
+namespace App\Http\Controllers\Chief;
+
+use App\Http\Controllers\Controller;
+use App\Models\EmergencyAssignment;
+use App\Models\Lgu;
+use App\Models\Station;
+use App\Models\User;
+use App\Support\StationSatisfactionScore;
+use App\UserRole;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class DashboardController extends Controller
+{
+    public function index(Request $request): Response
+    {
+        /** @var Station $station */
+        $station = $request->attributes->get('current_station');
+        /** @var Lgu $lgu */
+        $lgu = $request->attributes->get('current_lgu');
+
+        $staffCount = User::query()
+            ->where('role', UserRole::Staff)
+            ->where('station_id', $station->id)
+            ->count();
+
+        $assignments = EmergencyAssignment::query()
+            ->where('station_id', $station->id)
+            ->get(['id', 'status', 'public_rating', 'public_feedback', 'rated_at', 'completed_at', 'created_at']);
+
+        $satisfaction = StationSatisfactionScore::fromRatings(
+            $assignments->pluck('public_rating'),
+        );
+
+        $completedResponses = $assignments->where('status', 'completed')->count();
+        $activeAssignments = $assignments
+            ->whereIn('status', ['notified', 'accepted', 'en_route'])
+            ->count();
+
+        $recentFeedback = EmergencyAssignment::query()
+            ->with('emergency:id,description,address_text,created_at')
+            ->where('station_id', $station->id)
+            ->whereNotNull('public_rating')
+            ->latest('rated_at')
+            ->limit(5)
+            ->get()
+            ->map(fn (EmergencyAssignment $assignment): array => [
+                'id' => $assignment->id,
+                'public_rating' => $assignment->public_rating,
+                'public_feedback' => $assignment->public_feedback,
+                'rated_at' => $assignment->rated_at?->diffForHumans(),
+                'emergency' => $assignment->emergency?->description
+                    ?? $assignment->emergency?->address_text
+                    ?? 'Emergency response',
+            ]);
+
+        return Inertia::render('chief/dashboard', [
+            'station' => [
+                'id' => $station->id,
+                'name' => $station->name,
+                'type' => $station->stationType?->name,
+                'type_code' => $station->stationType?->code,
+                'status' => $station->status,
+            ],
+            'lgu' => [
+                'id' => $lgu->id,
+                'name' => $lgu->name,
+            ],
+            'satisfaction' => [
+                'score' => $satisfaction['score'],
+                'max_score' => StationSatisfactionScore::MAX_SCORE,
+                'average_rating' => $satisfaction['average_rating'],
+                'rating_count' => $satisfaction['rating_count'],
+                'has_ratings' => $satisfaction['has_ratings'],
+                'label' => 'Emergency Response Score',
+            ],
+            'stats' => [
+                'staff' => $staffCount,
+                'completed_responses' => $completedResponses,
+                'active_assignments' => $activeAssignments,
+                'public_ratings' => $satisfaction['rating_count'],
+            ],
+            'recentFeedback' => $recentFeedback,
+        ]);
+    }
+}
