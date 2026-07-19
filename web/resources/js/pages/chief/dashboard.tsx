@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import { useState } from 'react';
 
 import ChiefLayout from '@/layouts/ChiefLayout';
 
@@ -24,9 +25,15 @@ type Props = {
     };
     stats: {
         staff: number;
+        available_staff: number;
+        on_duty_staff: number;
         completed_responses: number;
         active_assignments: number;
         public_ratings: number;
+        high_risk_areas: number;
+        fire_warnings: number;
+        accident_ping_count: number;
+        fire_ping_count: number;
     };
     recentFeedback: Array<{
         id: number;
@@ -36,6 +43,132 @@ type Props = {
         emergency: string;
     }>;
 };
+
+const EMERGENCY_SOUND_KEY = 'responde-emergency-sound-enabled';
+const DESKTOP_ALERT_KEY = 'responde-desktop-alert-enabled';
+const showBrowserAlert = (message: string) => window.alert(message);
+
+function EmergencyAlertSettings() {
+    const [soundEnabled, setSoundEnabled] = useState(
+        () =>
+            typeof window !== 'undefined' &&
+            localStorage.getItem(EMERGENCY_SOUND_KEY) === 'true',
+    );
+    const [desktopEnabled, setDesktopEnabled] = useState(
+        () =>
+            typeof window !== 'undefined' &&
+            localStorage.getItem(DESKTOP_ALERT_KEY) === 'true',
+    );
+    const [notificationPermission, setNotificationPermission] =
+        useState<NotificationPermission>(() =>
+            typeof window !== 'undefined' && 'Notification' in window
+                ? Notification.permission
+                : 'default',
+        );
+
+    const toggleSound = () => {
+        const next = !soundEnabled;
+        setSoundEnabled(next);
+        localStorage.setItem(EMERGENCY_SOUND_KEY, String(next));
+        console.log('[Responde Chief] Emergency sound preference changed', {
+            enabled: next,
+        });
+
+        if (next) {
+            try {
+                const audioContext = new AudioContext();
+                const oscillator = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                oscillator.frequency.value = 660;
+                gain.gain.value = 0.08;
+                oscillator.connect(gain);
+                gain.connect(audioContext.destination);
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.25);
+                oscillator.addEventListener('ended', () =>
+                    audioContext.close(),
+                );
+            } catch (error) {
+                console.warn('[Responde Chief] Alert sound test failed', error);
+            }
+        }
+    };
+
+    const toggleDesktopAlerts = async () => {
+        if (!('Notification' in window)) {
+            showBrowserAlert(
+                'Desktop notifications are not supported by this browser.',
+            );
+
+            return;
+        }
+
+        if (desktopEnabled) {
+            setDesktopEnabled(false);
+            localStorage.setItem(DESKTOP_ALERT_KEY, 'false');
+
+            return;
+        }
+
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+
+        const next = permission === 'granted';
+        setDesktopEnabled(next);
+        localStorage.setItem(DESKTOP_ALERT_KEY, String(next));
+        console.log('[Responde Chief] Desktop alert permission', permission);
+
+        if (!next) {
+            showBrowserAlert(
+                'Desktop notification permission was not granted. You can enable it in your browser site settings.',
+            );
+        }
+    };
+
+    return (
+        <section className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 className="font-bold text-slate-900">Emergency alerts</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                    A live in-app alert always appears for new requests. Sound
+                    and desktop alerts are optional on this device.
+                </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+                <button
+                    type="button"
+                    onClick={toggleSound}
+                    aria-pressed={soundEnabled}
+                    className={`min-h-11 rounded-lg border px-3 text-sm font-semibold ${
+                        soundEnabled
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                >
+                    Sound: {soundEnabled ? 'On' : 'Off'}
+                </button>
+                <button
+                    type="button"
+                    onClick={toggleDesktopAlerts}
+                    aria-pressed={desktopEnabled}
+                    disabled={notificationPermission === 'denied'}
+                    className={`min-h-11 rounded-lg border px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${
+                        desktopEnabled
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                >
+                    Desktop alerts:{' '}
+                    {notificationPermission === 'denied'
+                        ? 'Blocked'
+                        : desktopEnabled
+                          ? 'On'
+                          : 'Off'}
+                </button>
+            </div>
+        </section>
+    );
+}
 
 function StatCard({
     label,
@@ -96,6 +229,8 @@ export default function ChiefDashboard({
         >
             <Head title="Chief Dashboard" />
 
+            <EmergencyAlertSettings />
+
             <section className="mb-6 rounded-2xl border border-brand/20 bg-gradient-to-br from-brand-light/70 to-white p-5 shadow-sm sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
@@ -128,10 +263,10 @@ export default function ChiefDashboard({
                 </div>
             </section>
 
-            <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-5">
                 <StatCard
-                    label="Staff accounts"
-                    value={stats.staff}
+                    label="Available / on duty"
+                    value={`${stats.available_staff} / ${stats.on_duty_staff}`}
                     tone="blue"
                 />
                 <StatCard
@@ -155,7 +290,45 @@ export default function ChiefDashboard({
                     value={stats.public_ratings}
                     tone="slate"
                 />
+                <Link
+                    href="/chief/high-risk-areas"
+                    className="rounded-2xl focus:outline-2 focus:outline-offset-2 focus:outline-brand"
+                    aria-label={`View ${stats.high_risk_areas} high-risk areas`}
+                >
+                    <StatCard
+                        label="High-risk areas"
+                        value={stats.high_risk_areas}
+                        tone="amber"
+                    />
+                </Link>
             </div>
+
+            {(stats.high_risk_areas > 0 || stats.fire_warnings > 0) && (
+                <section className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 shadow-sm sm:px-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h2 className="font-bold text-red-800">
+                                Nationwide high-risk areas detected
+                            </h2>
+                            <p className="mt-1 text-sm text-red-700">
+                                {stats.high_risk_areas} high-risk hotspot
+                                {stats.high_risk_areas === 1 ? '' : 's'}
+                                {stats.fire_warnings > 0
+                                    ? ` and ${stats.fire_warnings} fire warning${stats.fire_warnings === 1 ? '' : 's'}`
+                                    : ''}{' '}
+                                from {stats.accident_ping_count} accident and{' '}
+                                {stats.fire_ping_count} fire location pings.
+                            </p>
+                        </div>
+                        <Link
+                            href="/chief/high-risk-areas"
+                            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700"
+                        >
+                            Open map
+                        </Link>
+                    </div>
+                </section>
+            )}
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

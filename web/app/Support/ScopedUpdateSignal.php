@@ -22,13 +22,38 @@ class ScopedUpdateSignal
 
     public function version(string $scope, int $scopeId): string
     {
-        return (string) Cache::get($this->cacheKey($scope, $scopeId), 'initial');
+        return $this->state($scope, $scopeId)['version'];
+    }
+
+    /**
+     * @return array{version: string, topic: string|null}
+     */
+    public function state(string $scope, int $scopeId): array
+    {
+        $cached = Cache::get($this->cacheKey($scope, $scopeId), 'initial');
+
+        if (is_array($cached)) {
+            return [
+                'version' => (string) ($cached['version'] ?? 'initial'),
+                'topic' => filled($cached['topic'] ?? null)
+                    ? (string) $cached['topic']
+                    : null,
+            ];
+        }
+
+        return [
+            'version' => (string) $cached,
+            'topic' => null,
+        ];
     }
 
     private function publish(string $scope, int $scopeId, string $topic): string
     {
         $version = now()->format('YmdHis.u').'-'.Str::lower(Str::random(8));
-        Cache::forever($this->cacheKey($scope, $scopeId), $version);
+        Cache::forever($this->cacheKey($scope, $scopeId), [
+            'version' => $version,
+            'topic' => $topic,
+        ]);
 
         if (
             config('broadcasting.default') !== 'pusher'

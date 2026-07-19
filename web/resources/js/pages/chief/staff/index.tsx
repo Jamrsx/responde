@@ -12,6 +12,7 @@ type StaffMember = {
     email: string;
     phone: string | null;
     position_title: string | null;
+    availability_status: 'off_duty' | 'available' | 'unavailable';
     created_at: string | null;
 };
 
@@ -26,6 +27,11 @@ type Props = {
         name: string;
     };
     staff: StaffMember[];
+    availabilityStats: {
+        available: number;
+        unavailable: number;
+        off_duty: number;
+    };
     positionSuggestions: string[];
 };
 
@@ -49,33 +55,39 @@ export default function ChiefStaffIndex({
     station,
     lgu,
     staff,
+    availabilityStats,
     positionSuggestions,
 }: Props) {
     const { flash } = usePage<FlashProps>().props;
     const [showModal, setShowModal] = useState(false);
     const [search, setSearch] = useState('');
+    const [availabilityFilter, setAvailabilityFilter] = useState('all');
     const [showPassword, setShowPassword] = useState(false);
     const form = useForm(emptyForm);
 
     const filteredStaff = useMemo(() => {
         const query = search.trim().toLowerCase();
 
-        if (!query) {
-            return staff;
-        }
+        return staff.filter((member) => {
+            const matchesAvailability =
+                availabilityFilter === 'all' ||
+                member.availability_status === availabilityFilter;
+            const matchesSearch =
+                !query ||
+                [
+                    member.name,
+                    member.email,
+                    member.phone ?? '',
+                    member.position_title ?? '',
+                    member.availability_status.replaceAll('_', ' '),
+                ]
+                    .join(' ')
+                    .toLowerCase()
+                    .includes(query);
 
-        return staff.filter((member) =>
-            [
-                member.name,
-                member.email,
-                member.phone ?? '',
-                member.position_title ?? '',
-            ]
-                .join(' ')
-                .toLowerCase()
-                .includes(query),
-        );
-    }, [search, staff]);
+            return matchesAvailability && matchesSearch;
+        });
+    }, [availabilityFilter, search, staff]);
 
     const openCreate = () => {
         form.reset();
@@ -120,6 +132,21 @@ export default function ChiefStaffIndex({
         });
     };
 
+    const updateAvailability = (
+        member: StaffMember,
+        availabilityStatus: StaffMember['availability_status'],
+    ) => {
+        console.log('[Responde Chief] Updating staff availability', {
+            staffId: member.id,
+            availabilityStatus,
+        });
+        router.patch(
+            `/chief/staff/${member.id}/availability`,
+            { availability_status: availabilityStatus },
+            { preserveScroll: true },
+        );
+    };
+
     return (
         <ChiefLayout
             title="Staff Accounts"
@@ -150,19 +177,65 @@ export default function ChiefStaffIndex({
                 </div>
             )}
 
+            <div className="mb-5 grid grid-cols-3 gap-3">
+                {[
+                    [
+                        'Available',
+                        availabilityStats.available,
+                        'text-emerald-700',
+                    ],
+                    [
+                        'Unavailable',
+                        availabilityStats.unavailable,
+                        'text-amber-700',
+                    ],
+                    ['Off duty', availabilityStats.off_duty, 'text-slate-600'],
+                ].map(([label, value, tone]) => (
+                    <div
+                        key={String(label)}
+                        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                        <p className="text-xs font-semibold text-slate-500">
+                            {label}
+                        </p>
+                        <p className={`mt-1 text-2xl font-bold ${tone}`}>
+                            {value}
+                        </p>
+                    </div>
+                ))}
+            </div>
+
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-100 p-4">
-                    <label htmlFor="staff-search" className="sr-only">
-                        Search staff
+                <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row">
+                    <div className="min-w-0 flex-1">
+                        <label htmlFor="staff-search" className="sr-only">
+                            Search staff
+                        </label>
+                        <input
+                            id="staff-search"
+                            type="search"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="Search by name, email, phone, position, or availability..."
+                            className={inputClassName}
+                        />
+                    </div>
+                    <label className="sr-only" htmlFor="availability-filter">
+                        Filter by availability
                     </label>
-                    <input
-                        id="staff-search"
-                        type="search"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Search by name, email, phone, or position..."
-                        className={`${inputClassName} max-w-md`}
-                    />
+                    <select
+                        id="availability-filter"
+                        value={availabilityFilter}
+                        onChange={(event) =>
+                            setAvailabilityFilter(event.target.value)
+                        }
+                        className={`${inputClassName} sm:max-w-48`}
+                    >
+                        <option value="all">All availability</option>
+                        <option value="available">Available</option>
+                        <option value="unavailable">Unavailable</option>
+                        <option value="off_duty">Off duty</option>
+                    </select>
                 </div>
 
                 {filteredStaff.length === 0 ? (
@@ -191,6 +264,9 @@ export default function ChiefStaffIndex({
                                     </th>
                                     <th className="hidden px-4 py-3 font-medium md:table-cell">
                                         Phone
+                                    </th>
+                                    <th className="px-4 py-3 font-medium">
+                                        Availability
                                     </th>
                                     <th className="hidden px-4 py-3 font-medium sm:table-cell">
                                         Added
@@ -222,6 +298,40 @@ export default function ChiefStaffIndex({
                                         </td>
                                         <td className="hidden px-4 py-3.5 text-slate-600 md:table-cell">
                                             {member.phone || '—'}
+                                        </td>
+                                        <td className="px-4 py-3.5">
+                                            <select
+                                                value={
+                                                    member.availability_status
+                                                }
+                                                onChange={(event) =>
+                                                    updateAvailability(
+                                                        member,
+                                                        event.target
+                                                            .value as StaffMember['availability_status'],
+                                                    )
+                                                }
+                                                aria-label={`Availability for ${member.name}`}
+                                                className={`min-h-10 rounded-lg border px-2 text-xs font-semibold outline-none ${
+                                                    member.availability_status ===
+                                                    'available'
+                                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                        : member.availability_status ===
+                                                            'unavailable'
+                                                          ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                                          : 'border-slate-200 bg-slate-50 text-slate-600'
+                                                }`}
+                                            >
+                                                <option value="available">
+                                                    Available
+                                                </option>
+                                                <option value="unavailable">
+                                                    Unavailable
+                                                </option>
+                                                <option value="off_duty">
+                                                    Off duty
+                                                </option>
+                                            </select>
                                         </td>
                                         <td className="hidden px-4 py-3.5 text-slate-500 sm:table-cell">
                                             {member.created_at ?? '—'}

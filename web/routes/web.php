@@ -9,9 +9,12 @@ use App\Http\Controllers\BarangayMapController;
 use App\Http\Controllers\Captain\DashboardController as CaptainDashboardController;
 use App\Http\Controllers\Captain\TanodOutpostController;
 use App\Http\Controllers\Chief\DashboardController as ChiefDashboardController;
+use App\Http\Controllers\Chief\HighRiskAreaController as ChiefHighRiskAreaController;
+use App\Http\Controllers\Chief\ResponseReportController as ChiefResponseReportController;
 use App\Http\Controllers\Chief\ResponseRequestController as ChiefResponseRequestController;
-use App\Http\Controllers\Chief\StationLocationController as ChiefStationLocationController;
 use App\Http\Controllers\Chief\StaffController as ChiefStaffController;
+use App\Http\Controllers\Chief\StationLocationController as ChiefStationLocationController;
+use App\Http\Controllers\Chief\StationSettingsController as ChiefStationSettingsController;
 use App\Http\Controllers\Lgu\BarangayController;
 use App\Http\Controllers\Lgu\ChiefController;
 use App\Http\Controllers\Lgu\DashboardController as LguDashboardController;
@@ -173,6 +176,22 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/station-location', [ChiefStationLocationController::class, 'store'])
             ->middleware('throttle:10,1')
             ->name('chief.station-location.store');
+        Route::get('/station-settings', [ChiefStationSettingsController::class, 'index'])
+            ->name('chief.station-settings.index');
+        Route::put('/station-settings', [ChiefStationSettingsController::class, 'update'])
+            ->name('chief.station-settings.update');
+        Route::get('/reports', [ChiefResponseReportController::class, 'index'])
+            ->name('chief.reports.index');
+        Route::get('/high-risk-areas', [ChiefHighRiskAreaController::class, 'index'])
+            ->name('chief.high-risk-areas.index');
+        Route::post('/high-risk-areas/refresh', [ChiefHighRiskAreaController::class, 'refresh'])
+            ->middleware('throttle:30,1')
+            ->name('chief.high-risk-areas.refresh');
+        Route::redirect('/accident-prone-areas', '/chief/high-risk-areas')
+            ->name('chief.accident-prone-areas.index');
+        Route::post('/accident-prone-areas/refresh', [ChiefHighRiskAreaController::class, 'refresh'])
+            ->middleware('throttle:30,1')
+            ->name('chief.accident-prone-areas.refresh');
         Route::get('/staff', [ChiefStaffController::class, 'index'])
             ->name('chief.staff.index');
         Route::post('/staff', [ChiefStaffController::class, 'store'])
@@ -180,5 +199,7 @@ Route::middleware('auth')->group(function (): void {
             ->name('chief.staff.store');
         Route::delete('/staff/{staff}', [ChiefStaffController::class, 'destroy'])
             ->name('chief.staff.destroy');
+        Route::patch('/staff/{staff}/availability', [ChiefStaffController::class, 'updateAvailability'])
+            ->name('chief.staff.availability.update');
     });
 });

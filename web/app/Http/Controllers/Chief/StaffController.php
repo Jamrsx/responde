@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Chief;
 use App\Actions\Users\CreateManagedAccount;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Chief\StoreStaffRequest;
+use App\Http\Requests\Chief\UpdateStaffAvailabilityRequest;
 use App\Mail\StaffCredentialsMail;
+use App\Models\AuditLog;
 use App\Models\Lgu;
 use App\Models\Station;
 use App\Models\User;
+use App\Support\ScopedUpdateSignal;
 use App\UserRole;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -40,6 +43,7 @@ class StaffController extends Controller
                 'email' => $user->email,
                 'phone' => $user->phone,
                 'position_title' => $user->position_title,
+                'availability_status' => $user->availability_status,
                 'created_at' => $user->created_at?->diffForHumans(),
             ]);
 
@@ -54,6 +58,11 @@ class StaffController extends Controller
                 'name' => $lgu->name,
             ],
             'staff' => $staff,
+            'availabilityStats' => [
+                'available' => $staff->where('availability_status', 'available')->count(),
+                'unavailable' => $staff->where('availability_status', 'unavailable')->count(),
+                'off_duty' => $staff->where('availability_status', 'off_duty')->count(),
+            ],
             'positionSuggestions' => [
                 'Rescuer',
                 'Dispatcher',
@@ -147,6 +156,52 @@ class StaffController extends Controller
         return back()->with(
             'success',
             "{$account->name} was added to {$station->name}. Login credentials were emailed to {$account->email}.",
+        );
+    }
+
+    public function updateAvailability(
+        UpdateStaffAvailabilityRequest $request,
+        User $staff,
+        ScopedUpdateSignal $signals,
+    ): RedirectResponse {
+        /** @var Station $station */
+        $station = $request->attributes->get('current_station');
+
+        if (
+            $staff->role !== UserRole::Staff
+            || $staff->station_id !== $station->id
+        ) {
+            abort(403);
+        }
+
+        $oldStatus = $staff->availability_status;
+        $newStatus = (string) $request->validated('availability_status');
+        $staff->update(['availability_status' => $newStatus]);
+
+        AuditLog::query()->create([
+            'user_id' => $request->user()?->id,
+            'action' => 'staff.availability_updated',
+            'auditable_type' => User::class,
+            'auditable_id' => $staff->id,
+            'old_values' => ['availability_status' => $oldStatus],
+            'new_values' => ['availability_status' => $newStatus],
+        ]);
+
+        $signals->publishStation(
+            $station->id,
+            'staff.availability.updated',
+        );
+
+        Log::info('Chief updated staff availability.', [
+            'station_id' => $station->id,
+            'staff_id' => $staff->id,
+            'availability_status' => $newStatus,
+            'chief_user_id' => $request->user()?->id,
+        ]);
+
+        return back()->with(
+            'success',
+            "{$staff->name} is now ".str_replace('_', ' ', $newStatus).'.',
         );
     }
 

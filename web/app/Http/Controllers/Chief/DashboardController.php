@@ -7,6 +7,7 @@ use App\Models\EmergencyAssignment;
 use App\Models\Lgu;
 use App\Models\Station;
 use App\Models\User;
+use App\Support\HighRiskAreaDetector;
 use App\Support\StationSatisfactionScore;
 use App\UserRole;
 use Illuminate\Http\Request;
@@ -15,17 +16,19 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request): Response
-    {
+    public function index(
+        Request $request,
+        HighRiskAreaDetector $detector,
+    ): Response {
         /** @var Station $station */
         $station = $request->attributes->get('current_station');
         /** @var Lgu $lgu */
         $lgu = $request->attributes->get('current_lgu');
 
-        $staffCount = User::query()
+        $staff = User::query()
             ->where('role', UserRole::Staff)
             ->where('station_id', $station->id)
-            ->count();
+            ->get(['id', 'availability_status']);
 
         $assignments = EmergencyAssignment::query()
             ->where('station_id', $station->id)
@@ -57,6 +60,8 @@ class DashboardController extends Controller
                     ?? 'Emergency response',
             ]);
 
+        $highRisk = $detector->detectNationwide();
+
         return Inertia::render('chief/dashboard', [
             'station' => [
                 'id' => $station->id,
@@ -78,10 +83,20 @@ class DashboardController extends Controller
                 'label' => 'Emergency Response Score',
             ],
             'stats' => [
-                'staff' => $staffCount,
+                'staff' => $staff->count(),
+                'available_staff' => $staff
+                    ->where('availability_status', 'available')
+                    ->count(),
+                'on_duty_staff' => $staff
+                    ->whereIn('availability_status', ['available', 'unavailable'])
+                    ->count(),
                 'completed_responses' => $completedResponses,
                 'active_assignments' => $activeAssignments,
                 'public_ratings' => $satisfaction['rating_count'],
+                'high_risk_areas' => $highRisk['summary']['high_risk_area_count'],
+                'fire_warnings' => $highRisk['summary']['fire_warning_count'],
+                'accident_ping_count' => $highRisk['summary']['accident_ping_count'],
+                'fire_ping_count' => $highRisk['summary']['fire_ping_count'],
             ],
             'recentFeedback' => $recentFeedback,
         ]);

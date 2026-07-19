@@ -23,6 +23,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property UserRole $role
  * @property string|null $phone
  * @property string|null $position_title
+ * @property string $availability_status
  * @property string|null $profile_photo_path
  * @property int|null $lgu_id
  * @property int|null $station_id
@@ -32,7 +33,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password', 'role', 'phone', 'position_title', 'profile_photo_path', 'lgu_id', 'station_id'])]
+#[Fillable(['name', 'email', 'password', 'role', 'phone', 'position_title', 'availability_status', 'profile_photo_path', 'lgu_id', 'station_id'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -44,6 +45,7 @@ class User extends Authenticatable
      */
     protected $attributes = [
         'role' => 'civilian',
+        'availability_status' => 'off_duty',
     ];
 
     /**

@@ -16,7 +16,9 @@ return new class extends Migration
             $table->string('role')->default('civilian')->after('email')->index();
             $table->string('phone')->nullable()->after('role');
             $table->string('position_title')->nullable()->after('phone');
-            $table->string('profile_photo_path')->nullable()->after('position_title');
+            // off_duty | available | unavailable
+            $table->string('availability_status')->default('off_duty')->after('position_title')->index();
+            $table->string('profile_photo_path')->nullable()->after('availability_status');
             $table->foreignId('lgu_id')->nullable()->after('profile_photo_path')->constrained('lgus')->nullOnDelete();
             $table->foreignId('station_id')->nullable()->after('lgu_id')->constrained('stations')->nullOnDelete();
             $table->softDeletes();
@@ -32,7 +34,7 @@ return new class extends Migration
             $table->dropSoftDeletes();
             $table->dropConstrainedForeignId('station_id');
             $table->dropConstrainedForeignId('lgu_id');
-            $table->dropColumn(['role', 'phone', 'position_title', 'profile_photo_path']);
+            $table->dropColumn(['role', 'phone', 'position_title', 'availability_status', 'profile_photo_path']);
         });
     }
 };

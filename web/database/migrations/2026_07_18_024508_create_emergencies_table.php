@@ -33,6 +33,14 @@ return new class extends Migration
             $table->index(['latitude', 'longitude']);
             $table->index(['status', 'created_at']);
             $table->index(['lgu_id', 'status']);
+            $table->index(
+                ['lgu_id', 'emergency_type_id', 'created_at'],
+                'emergencies_lgu_type_created_index',
+            );
+            $table->index(
+                ['emergency_type_id', 'created_at', 'status'],
+                'emergencies_type_created_status_index',
+            );
         });
     }
 

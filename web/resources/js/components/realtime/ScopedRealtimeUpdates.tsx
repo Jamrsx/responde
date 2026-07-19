@@ -1,6 +1,6 @@
-import { router, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import Pusher from 'pusher-js';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type RealtimeScope = {
     scope: 'lgu' | 'station' | null;
@@ -21,18 +21,30 @@ type ScopeUpdatedPayload = {
 
 const FALLBACK_POLL_MS = 5_000;
 const CONNECTED_SAFETY_POLL_MS = 30_000;
+const EMERGENCY_SOUND_KEY = 'responde-emergency-sound-enabled';
+const DESKTOP_ALERT_KEY = 'responde-desktop-alert-enabled';
 
 export default function ScopedRealtimeUpdates() {
     const { realtime } = usePage<SharedPageProps>().props;
     const versionRef = useRef(realtime?.version ?? 'initial');
     const reloadPendingRef = useRef(false);
+    const [showEmergencyToast, setShowEmergencyToast] = useState(false);
 
     useEffect(() => {
-        if (
-            !realtime?.scope ||
-            !realtime.scope_id ||
-            !realtime.channel
-        ) {
+        if (!showEmergencyToast) {
+            return;
+        }
+
+        const timer = window.setTimeout(
+            () => setShowEmergencyToast(false),
+            12_000,
+        );
+
+        return () => window.clearTimeout(timer);
+    }, [showEmergencyToast]);
+
+    useEffect(() => {
+        if (!realtime?.scope || !realtime.scope_id || !realtime.channel) {
             return;
         }
 
@@ -43,6 +55,63 @@ export default function ScopedRealtimeUpdates() {
         let pollTimer: ReturnType<typeof setTimeout> | null = null;
         let activeRequest: AbortController | null = null;
         let pusher: Pusher | null = null;
+
+        const notifyEmergencyRequest = () => {
+            if (realtime.scope !== 'station') {
+                return;
+            }
+
+            setShowEmergencyToast(true);
+
+            if (localStorage.getItem(EMERGENCY_SOUND_KEY) === 'true') {
+                try {
+                    const audioContext = new AudioContext();
+                    const oscillator = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(
+                        880,
+                        audioContext.currentTime,
+                    );
+                    gain.gain.setValueAtTime(0.15, audioContext.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(
+                        0.001,
+                        audioContext.currentTime + 0.7,
+                    );
+                    oscillator.connect(gain);
+                    gain.connect(audioContext.destination);
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.7);
+                    oscillator.addEventListener('ended', () =>
+                        audioContext.close(),
+                    );
+                } catch (error) {
+                    console.warn(
+                        '[Responde Realtime] Emergency sound could not play',
+                        error,
+                    );
+                }
+            }
+
+            if (
+                localStorage.getItem(DESKTOP_ALERT_KEY) === 'true' &&
+                'Notification' in window &&
+                Notification.permission === 'granted'
+            ) {
+                const notification = new Notification(
+                    'New emergency response request',
+                    {
+                        body: 'Open Responde to review the new assignment.',
+                        tag: 'responde-new-emergency',
+                    },
+                );
+                notification.onclick = () => {
+                    window.focus();
+                    router.visit('/chief/requests');
+                    notification.close();
+                };
+            }
+        };
 
         const refreshPageData = (
             version: string,
@@ -65,6 +134,10 @@ export default function ScopedRealtimeUpdates() {
                 source,
                 topic,
             });
+
+            if (topic === 'emergency.assignment.created') {
+                notifyEmergencyRequest();
+            }
 
             router.reload({
                 onFinish: () => {
@@ -114,12 +187,20 @@ export default function ScopedRealtimeUpdates() {
 
                     const payload = (await response.json()) as {
                         version: string;
+                        topic?: string | null;
                     };
-                    refreshPageData(payload.version, 'polling');
+                    refreshPageData(
+                        payload.version,
+                        'polling',
+                        payload.topic ?? undefined,
+                    );
                 } catch (error) {
                     if (
                         !disposed &&
-                        !(error instanceof DOMException && error.name === 'AbortError')
+                        !(
+                            error instanceof DOMException &&
+                            error.name === 'AbortError'
+                        )
                     ) {
                         console.warn(
                             '[Responde Realtime] Polling check failed',
@@ -134,8 +215,7 @@ export default function ScopedRealtimeUpdates() {
         };
 
         const pusherKey = import.meta.env.VITE_PUSHER_APP_KEY;
-        const pusherCluster =
-            import.meta.env.VITE_PUSHER_APP_CLUSTER || 'ap3';
+        const pusherCluster = import.meta.env.VITE_PUSHER_APP_CLUSTER || 'ap3';
 
         if (pusherKey) {
             const csrfToken =
@@ -176,26 +256,20 @@ export default function ScopedRealtimeUpdates() {
                 });
 
                 const channel = pusher.subscribe(channelName);
-                channel.bind(
-                    'pusher:subscription_succeeded',
-                    () => {
-                        connected = true;
-                        console.log(
-                            '[Responde Realtime] Private channel connected',
-                            channelName,
-                        );
-                    },
-                );
-                channel.bind(
-                    'pusher:subscription_error',
-                    (error: unknown) => {
-                        connected = false;
-                        console.warn(
-                            '[Responde Realtime] Private channel failed; polling remains active',
-                            error,
-                        );
-                    },
-                );
+                channel.bind('pusher:subscription_succeeded', () => {
+                    connected = true;
+                    console.log(
+                        '[Responde Realtime] Private channel connected',
+                        channelName,
+                    );
+                });
+                channel.bind('pusher:subscription_error', (error: unknown) => {
+                    connected = false;
+                    console.warn(
+                        '[Responde Realtime] Private channel failed; polling remains active',
+                        error,
+                    );
+                });
                 channel.bind(
                     'scope.updated',
                     (payload: ScopeUpdatedPayload) => {
@@ -237,5 +311,44 @@ export default function ScopedRealtimeUpdates() {
         };
     }, [realtime]);
 
-    return null;
+    if (!showEmergencyToast) {
+        return null;
+    }
+
+    return (
+        <div
+            role="alert"
+            aria-live="assertive"
+            className="fixed right-4 bottom-4 z-[100] w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-red-200 bg-white p-4 shadow-2xl"
+        >
+            <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-lg font-bold text-red-700">
+                    !
+                </span>
+                <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-900">
+                        New emergency response request
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                        A new assignment was sent to your station.
+                    </p>
+                    <div className="mt-3 flex items-center gap-2">
+                        <Link
+                            href="/chief/requests"
+                            className="inline-flex min-h-10 items-center rounded-lg bg-red-600 px-3 text-sm font-semibold text-white hover:bg-red-700"
+                        >
+                            View request
+                        </Link>
+                        <button
+                            type="button"
+                            onClick={() => setShowEmergencyToast(false)}
+                            className="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }

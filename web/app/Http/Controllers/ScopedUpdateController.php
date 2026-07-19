@@ -26,10 +26,13 @@ class ScopedUpdateController extends Controller
             ]);
         }
 
+        $state = $signals->state($scope, $scopeId);
+
         return response()->json([
             'scope' => $scope,
             'scope_id' => $scopeId,
-            'version' => $signals->version($scope, $scopeId),
+            'version' => $state['version'],
+            'topic' => $state['topic'],
         ])->header('Cache-Control', 'no-store, private');
     }
 

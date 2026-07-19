@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\EmergencyAssignment;
 use App\Models\Station;
 use App\Models\User;
 use App\Support\ScopedUpdateSignal;
@@ -55,6 +56,7 @@ class HandleInertiaRequests extends Middleware
         }
 
         $pendingLocationUpdates = [];
+        $newResponseRequestCount = 0;
 
         if ($user?->role === UserRole::LguAdmin && $user->lgu_id !== null) {
             $pendingLocationUpdates = Station::query()
@@ -71,6 +73,13 @@ class HandleInertiaRequests extends Middleware
                 ])
                 ->values()
                 ->all();
+        }
+
+        if ($user?->role === UserRole::Chief && $user->station_id !== null) {
+            $newResponseRequestCount = EmergencyAssignment::query()
+                ->where('station_id', $user->station_id)
+                ->where('status', 'notified')
+                ->count();
         }
 
         [$realtimeScope, $realtimeScopeId] = match ($user?->role) {
@@ -109,6 +118,7 @@ class HandleInertiaRequests extends Middleware
             'notifications' => [
                 'pending_location_updates' => $pendingLocationUpdates,
                 'pending_location_update_count' => count($pendingLocationUpdates),
+                'new_response_request_count' => $newResponseRequestCount,
             ],
             'realtime' => [
                 'scope' => $realtimeScope,
