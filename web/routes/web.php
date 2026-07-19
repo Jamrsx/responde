@@ -9,6 +9,8 @@ use App\Http\Controllers\BarangayMapController;
 use App\Http\Controllers\Captain\DashboardController as CaptainDashboardController;
 use App\Http\Controllers\Captain\TanodOutpostController;
 use App\Http\Controllers\Chief\DashboardController as ChiefDashboardController;
+use App\Http\Controllers\Chief\ResponseRequestController as ChiefResponseRequestController;
+use App\Http\Controllers\Chief\StationLocationController as ChiefStationLocationController;
 use App\Http\Controllers\Chief\StaffController as ChiefStaffController;
 use App\Http\Controllers\Lgu\BarangayController;
 use App\Http\Controllers\Lgu\ChiefController;
@@ -131,6 +133,10 @@ Route::middleware('auth')->group(function (): void {
             ->name('lgu.stations.approve');
         Route::patch('/stations/{station}/reject', [StationController::class, 'reject'])
             ->name('lgu.stations.reject');
+        Route::patch('/stations/{station}/location-update/approve', [StationController::class, 'approveLocationUpdate'])
+            ->name('lgu.stations.location-update.approve');
+        Route::patch('/stations/{station}/location-update/reject', [StationController::class, 'rejectLocationUpdate'])
+            ->name('lgu.stations.location-update.reject');
 
         Route::get('/chiefs', [ChiefController::class, 'index'])
             ->name('lgu.chiefs.index');
@@ -156,6 +162,13 @@ Route::middleware('auth')->group(function (): void {
     Route::middleware('chief')->prefix('chief')->group(function (): void {
         Route::get('/', [ChiefDashboardController::class, 'index'])
             ->name('chief.dashboard');
+        Route::get('/requests', [ChiefResponseRequestController::class, 'index'])
+            ->name('chief.requests.index');
+        Route::get('/station-location', [ChiefStationLocationController::class, 'index'])
+            ->name('chief.station-location.index');
+        Route::post('/station-location', [ChiefStationLocationController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('chief.station-location.store');
         Route::get('/staff', [ChiefStaffController::class, 'index'])
             ->name('chief.staff.index');
         Route::post('/staff', [ChiefStaffController::class, 'store'])

@@ -17,6 +17,14 @@ type SharedPageProps = {
     auth: {
         user: AuthUser | null;
     };
+    notifications?: {
+        pending_location_updates: Array<{
+            id: number;
+            name: string;
+            requested_at: string | null;
+        }>;
+        pending_location_update_count: number;
+    };
     flash: {
         success: string | null;
         error: string | null;
@@ -27,6 +35,8 @@ export type PortalNavItem = {
     label: string;
     href: string;
     icon: ReactNode;
+    badgeCount?: number;
+    badgeLabel?: string;
 };
 
 function NavIcon({ children }: { children: ReactNode }) {
@@ -179,13 +189,26 @@ export default function PortalLayout({
                         item.href === homeHref
                             ? currentPath === item.href
                             : currentPath.startsWith(item.href);
+                    const badgeCount = item.badgeCount ?? 0;
+                    const hasBadge = badgeCount > 0;
+                    const badgeText =
+                        badgeCount > 9 ? '9+' : String(badgeCount);
+                    const badgeTitle =
+                        item.badgeLabel ??
+                        `${badgeCount} pending notification${badgeCount === 1 ? '' : 's'}`;
 
                     return (
                         <Link
                             key={item.label}
                             href={item.href}
-                            title={collapsed ? item.label : undefined}
-                            className={`flex min-h-11 items-center rounded-lg text-sm font-medium transition ${
+                            title={
+                                collapsed
+                                    ? hasBadge
+                                        ? `${item.label} · ${badgeTitle}`
+                                        : item.label
+                                    : undefined
+                            }
+                            className={`relative flex min-h-11 items-center rounded-lg text-sm font-medium transition ${
                                 collapsed
                                     ? 'justify-center px-2'
                                     : 'gap-3 px-3'
@@ -195,9 +218,39 @@ export default function PortalLayout({
                                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                             }`}
                             aria-current={isActive ? 'page' : undefined}
+                            aria-label={
+                                hasBadge
+                                    ? `${item.label}, ${badgeTitle}`
+                                    : undefined
+                            }
                         >
-                            <NavIcon>{item.icon}</NavIcon>
-                            {!collapsed && item.label}
+                            <span className="relative shrink-0">
+                                <NavIcon>{item.icon}</NavIcon>
+                                {hasBadge && collapsed && (
+                                    <span
+                                        className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-white"
+                                        aria-hidden="true"
+                                    >
+                                        {badgeText}
+                                    </span>
+                                )}
+                            </span>
+                            {!collapsed && (
+                                <>
+                                    <span className="min-w-0 flex-1 truncate">
+                                        {item.label}
+                                    </span>
+                                    {hasBadge && (
+                                        <span
+                                            className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white"
+                                            title={badgeTitle}
+                                            aria-hidden="true"
+                                        >
+                                            {badgeText}
+                                        </span>
+                                    )}
+                                </>
+                            )}
                         </Link>
                     );
                 })}

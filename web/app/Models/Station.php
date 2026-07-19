@@ -21,6 +21,13 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'address',
     'latitude',
     'longitude',
+    'proposed_latitude',
+    'proposed_longitude',
+    'location_update_status',
+    'location_update_note',
+    'location_update_review_note',
+    'location_update_requested_at',
+    'location_update_reviewed_at',
     'status',
     'approval_status',
     'other_type_name',
@@ -43,6 +50,10 @@ class Station extends Model
         return [
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
+            'proposed_latitude' => 'decimal:7',
+            'proposed_longitude' => 'decimal:7',
+            'location_update_requested_at' => 'datetime',
+            'location_update_reviewed_at' => 'datetime',
         ];
     }
 

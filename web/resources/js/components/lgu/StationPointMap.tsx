@@ -288,6 +288,22 @@ export default function StationPointMap({
         );
     }, [focusMarkerId, markers]);
 
+    const markersForFit = useMemo(
+        () =>
+            selected
+                ? [
+                      ...markers,
+                      {
+                          id: '__selected_location__',
+                          name: 'Selected location',
+                          latitude: selected.latitude,
+                          longitude: selected.longitude,
+                      },
+                  ]
+                : markers,
+        [markers, selected],
+    );
+
     return (
         <div className="overflow-hidden rounded-xl border border-slate-200">
             <MapContainer
@@ -303,7 +319,7 @@ export default function StationPointMap({
                     maxNativeZoom={MAP_MAX_ZOOM}
                 />
                 <LockToBoundary boundary={boundary} />
-                {fitMarkers && <FitMarkers markers={markers} />}
+                {fitMarkers && <FitMarkers markers={markersForFit} />}
                 <FocusMarker marker={focusMarker} />
                 <FocusPosition position={focusPosition} />
                 {outsideMask && (

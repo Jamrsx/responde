@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Station;
 use App\Models\User;
 use App\UserRole;
 use Illuminate\Http\Request;
@@ -52,6 +53,25 @@ class HandleInertiaRequests extends Middleware
             $avatarUrl = '/storage/'.ltrim((string) $user->profile_photo_path, '/');
         }
 
+        $pendingLocationUpdates = [];
+
+        if ($user?->role === UserRole::LguAdmin && $user->lgu_id !== null) {
+            $pendingLocationUpdates = Station::query()
+                ->where('lgu_id', $user->lgu_id)
+                ->where('location_update_status', 'pending')
+                ->whereNotNull('proposed_latitude')
+                ->whereNotNull('proposed_longitude')
+                ->orderBy('location_update_requested_at')
+                ->get(['id', 'name', 'location_update_requested_at'])
+                ->map(fn (Station $station): array => [
+                    'id' => $station->id,
+                    'name' => $station->name,
+                    'requested_at' => $station->location_update_requested_at?->diffForHumans(),
+                ])
+                ->values()
+                ->all();
+        }
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
@@ -66,6 +86,10 @@ class HandleInertiaRequests extends Middleware
                         'avatar_url' => $avatarUrl,
                     ]
                     : null,
+            ],
+            'notifications' => [
+                'pending_location_updates' => $pendingLocationUpdates,
+                'pending_location_update_count' => count($pendingLocationUpdates),
             ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

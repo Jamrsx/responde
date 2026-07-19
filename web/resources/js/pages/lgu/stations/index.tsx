@@ -25,6 +25,13 @@ type Station = {
     address: string | null;
     latitude: string;
     longitude: string;
+    proposed_latitude: string | null;
+    proposed_longitude: string | null;
+    location_update_status: 'pending' | 'approved' | 'rejected' | null;
+    location_update_note: string | null;
+    location_update_review_note: string | null;
+    location_update_requested_at: string | null;
+    location_update_reviewed_at: string | null;
     status: string;
     approval_status: string;
     station_type_id: number;
@@ -112,6 +119,9 @@ export default function LguStationsIndex({
 }: Props) {
     const [showForm, setShowForm] = useState(false);
     const [editing, setEditing] = useState<Station | null>(null);
+    const [reviewingLocation, setReviewingLocation] =
+        useState<Station | null>(null);
+    const [locationReviewNote, setLocationReviewNote] = useState('');
     const [search, setSearch] = useState('');
     const [selectedStationId, setSelectedStationId] = useState<number | null>(
         null,
@@ -356,6 +366,84 @@ export default function LguStationsIndex({
                 </section>
             )}
 
+            {stations.some(
+                (station) => station.location_update_status === 'pending',
+            ) && (
+                <section
+                    role="status"
+                    className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-900"
+                >
+                    <p className="font-semibold">
+                        Location update requests need review
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-red-800">
+                        {
+                            stations.filter(
+                                (station) =>
+                                    station.location_update_status ===
+                                    'pending',
+                            ).length
+                        }{' '}
+                        station
+                        {stations.filter(
+                            (station) =>
+                                station.location_update_status === 'pending',
+                        ).length === 1
+                            ? ''
+                            : 's'}{' '}
+                        asked to update their office placement:
+                    </p>
+                    <ul className="mt-3 space-y-2">
+                        {stations
+                            .filter(
+                                (station) =>
+                                    station.location_update_status ===
+                                    'pending',
+                            )
+                            .map((station) => (
+                                <li
+                                    key={station.id}
+                                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/80 px-3 py-2"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="truncate font-semibold text-slate-900">
+                                            {station.name}
+                                        </p>
+                                        <p className="text-xs text-slate-600">
+                                            {[
+                                                station.type,
+                                                station.barangay,
+                                                station.chief
+                                                    ? `Chief: ${station.chief.name}`
+                                                    : null,
+                                                station.location_update_requested_at
+                                                    ? `Requested ${station.location_update_requested_at}`
+                                                    : null,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' · ')}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setReviewingLocation(station);
+                                            setLocationReviewNote('');
+                                            console.log(
+                                                '[Responde LGU] Opening location review from notice',
+                                                station.id,
+                                            );
+                                        }}
+                                        className="min-h-10 rounded-lg bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-700"
+                                    >
+                                        Review location
+                                    </button>
+                                </li>
+                            ))}
+                    </ul>
+                </section>
+            )}
+
             <div className="mb-4">
                 <input
                     type="search"
@@ -464,32 +552,44 @@ export default function LguStationsIndex({
                                 >
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex min-w-0 items-start gap-3">
-                                            <span
-                                                className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-700"
-                                                title={
-                                                    station.logo_url
-                                                        ? 'Official station logo'
-                                                        : stationIconLabel(
-                                                              resolveStationIcon(
-                                                                  station.icon_key,
-                                                                  station.type_code,
-                                                              ),
-                                                          )
-                                                }
-                                            >
-                                                {station.logo_url ? (
-                                                    <img
-                                                        src={station.logo_url}
-                                                        alt=""
-                                                        className="h-full w-full object-cover"
-                                                    />
-                                                ) : (
-                                                    <StationIcon
-                                                        iconKey={resolveStationIcon(
-                                                            station.icon_key,
-                                                            station.type_code,
-                                                        )}
-                                                        className="h-5 w-5"
+                                            <span className="relative mt-0.5 shrink-0">
+                                                <span
+                                                    className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-700"
+                                                    title={
+                                                        station.logo_url
+                                                            ? 'Official station logo'
+                                                            : stationIconLabel(
+                                                                  resolveStationIcon(
+                                                                      station.icon_key,
+                                                                      station.type_code,
+                                                                  ),
+                                                              )
+                                                    }
+                                                >
+                                                    {station.logo_url ? (
+                                                        <img
+                                                            src={
+                                                                station.logo_url
+                                                            }
+                                                            alt=""
+                                                            className="h-full w-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <StationIcon
+                                                            iconKey={resolveStationIcon(
+                                                                station.icon_key,
+                                                                station.type_code,
+                                                            )}
+                                                            className="h-5 w-5"
+                                                        />
+                                                    )}
+                                                </span>
+                                                {station.location_update_status ===
+                                                    'pending' && (
+                                                    <span
+                                                        className="absolute -top-0.5 -right-0.5 h-3 w-3 animate-pulse rounded-full bg-red-600 ring-2 ring-white"
+                                                        title="Location update request pending"
+                                                        aria-label="Location update request pending"
                                                     />
                                                 )}
                                             </span>
@@ -513,6 +613,12 @@ export default function LguStationsIndex({
                                                           ? 'Tanod outpost'
                                                           : 'No chief assigned'}
                                                 </p>
+                                                {station.location_update_status ===
+                                                    'pending' && (
+                                                    <p className="mt-2 inline-flex rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+                                                        Location update pending
+                                                    </p>
+                                                )}
                                                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                                     <span className="inline-flex rounded-lg bg-brand-light px-2 py-1 text-xs font-bold text-brand-dark">
                                                         {
@@ -564,6 +670,25 @@ export default function LguStationsIndex({
                                         >
                                             Edit
                                         </button>
+                                        {station.location_update_status ===
+                                            'pending' && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setReviewingLocation(
+                                                        station,
+                                                    );
+                                                    setLocationReviewNote('');
+                                                    console.log(
+                                                        '[Responde LGU] Reviewing station location request',
+                                                        station.id,
+                                                    );
+                                                }}
+                                                className="min-h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                                            >
+                                                Review location
+                                            </button>
+                                        )}
                                         {station.approval_status ===
                                             'pending' && (
                                             <>
@@ -606,6 +731,184 @@ export default function LguStationsIndex({
                     )}
                 </section>
             </div>
+
+            <Modal
+                show={reviewingLocation !== null}
+                title="Review station location"
+                onClose={() => {
+                    setReviewingLocation(null);
+                    setLocationReviewNote('');
+                }}
+                size="xl"
+            >
+                {reviewingLocation &&
+                    reviewingLocation.proposed_latitude &&
+                    reviewingLocation.proposed_longitude && (
+                        <div className="space-y-4">
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                                <p className="font-semibold text-amber-900">
+                                    {reviewingLocation.name}
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-amber-800">
+                                    Requested{' '}
+                                    {reviewingLocation.location_update_requested_at ??
+                                        'recently'}
+                                    . Green is the current approved position;
+                                    amber is the proposed position.
+                                </p>
+                                {reviewingLocation.location_update_note && (
+                                    <p className="mt-2 rounded-lg bg-white/70 px-3 py-2 text-sm text-slate-700">
+                                        Chief note:{' '}
+                                        {
+                                            reviewingLocation.location_update_note
+                                        }
+                                    </p>
+                                )}
+                            </div>
+
+                            <StationPointMap
+                                center={[
+                                    Number(reviewingLocation.latitude),
+                                    Number(reviewingLocation.longitude),
+                                ]}
+                                markers={[
+                                    {
+                                        id: `current-${reviewingLocation.id}`,
+                                        name: `${reviewingLocation.name} · Current approved location`,
+                                        latitude: Number(
+                                            reviewingLocation.latitude,
+                                        ),
+                                        longitude: Number(
+                                            reviewingLocation.longitude,
+                                        ),
+                                        color: '#047857',
+                                        iconKey: resolveStationIcon(
+                                            reviewingLocation.icon_key,
+                                            reviewingLocation.type_code,
+                                        ),
+                                        logoUrl:
+                                            reviewingLocation.logo_url,
+                                    },
+                                    {
+                                        id: `proposed-${reviewingLocation.id}`,
+                                        name: `${reviewingLocation.name} · Proposed location`,
+                                        latitude: Number(
+                                            reviewingLocation.proposed_latitude,
+                                        ),
+                                        longitude: Number(
+                                            reviewingLocation.proposed_longitude,
+                                        ),
+                                        color: '#d97706',
+                                        iconKey: resolveStationIcon(
+                                            reviewingLocation.icon_key,
+                                            reviewingLocation.type_code,
+                                        ),
+                                        logoUrl:
+                                            reviewingLocation.logo_url,
+                                    },
+                                ]}
+                                fitMarkers
+                                pickEnabled={false}
+                                boundaryUrl={mapUrl}
+                                className="h-[min(55vh,500px)] min-h-[340px] w-full"
+                            />
+
+                            <div className="grid grid-cols-1 gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-500">
+                                        Current coordinates
+                                    </p>
+                                    <p className="mt-1 font-mono text-slate-800">
+                                        {reviewingLocation.latitude},{' '}
+                                        {reviewingLocation.longitude}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold text-slate-500">
+                                        Proposed coordinates
+                                    </p>
+                                    <p className="mt-1 font-mono text-slate-800">
+                                        {
+                                            reviewingLocation.proposed_latitude
+                                        }
+                                        ,{' '}
+                                        {
+                                            reviewingLocation.proposed_longitude
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+
+                            <label className="block text-sm font-semibold text-slate-700">
+                                Review note (optional)
+                                <textarea
+                                    value={locationReviewNote}
+                                    onChange={(event) =>
+                                        setLocationReviewNote(
+                                            event.target.value,
+                                        )
+                                    }
+                                    rows={3}
+                                    maxLength={1000}
+                                    placeholder="Explain why the request is rejected, if applicable."
+                                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+                                />
+                            </label>
+
+                            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        console.log(
+                                            '[Responde LGU] Rejecting station location request',
+                                            reviewingLocation.id,
+                                        );
+                                        router.patch(
+                                            `/lgu/stations/${reviewingLocation.id}/location-update/reject`,
+                                            {
+                                                review_note:
+                                                    locationReviewNote,
+                                            },
+                                            {
+                                                preserveScroll: true,
+                                                onSuccess: () => {
+                                                    setReviewingLocation(null);
+                                                    setLocationReviewNote('');
+                                                },
+                                            },
+                                        );
+                                    }}
+                                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 hover:bg-red-50"
+                                >
+                                    Reject request
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        console.log(
+                                            '[Responde LGU] Approving station location request',
+                                            reviewingLocation.id,
+                                        );
+                                        router.patch(
+                                            `/lgu/stations/${reviewingLocation.id}/location-update/approve`,
+                                            {},
+                                            {
+                                                preserveScroll: true,
+                                                onSuccess: () => {
+                                                    setReviewingLocation(null);
+                                                    setLocationReviewNote('');
+                                                },
+                                            },
+                                        );
+                                    }}
+                                    className="inline-flex min-h-11 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+                                >
+                                    Approve new location
+                                </button>
+                            </div>
+                        </div>
+                    )}
+            </Modal>
 
             <Modal
                 show={showForm && editing !== null}

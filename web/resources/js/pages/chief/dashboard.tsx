@@ -139,11 +139,17 @@ export default function ChiefDashboard({
                     value={stats.completed_responses}
                     tone="green"
                 />
-                <StatCard
-                    label="Active assignments"
-                    value={stats.active_assignments}
-                    tone="amber"
-                />
+                <Link
+                    href="/chief/requests"
+                    className="rounded-2xl focus:outline-2 focus:outline-offset-2 focus:outline-brand"
+                    aria-label={`View ${stats.active_assignments} active response assignments`}
+                >
+                    <StatCard
+                        label="Active assignments"
+                        value={stats.active_assignments}
+                        tone="amber"
+                    />
+                </Link>
                 <StatCard
                     label="Public ratings"
                     value={stats.public_ratings}

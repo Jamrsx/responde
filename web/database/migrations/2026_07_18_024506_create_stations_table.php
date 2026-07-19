@@ -25,6 +25,14 @@ return new class extends Migration
             $table->text('address')->nullable();
             $table->decimal('latitude', 10, 7);
             $table->decimal('longitude', 10, 7);
+            $table->decimal('proposed_latitude', 10, 7)->nullable();
+            $table->decimal('proposed_longitude', 10, 7)->nullable();
+            // pending | approved | rejected
+            $table->string('location_update_status')->nullable()->index();
+            $table->text('location_update_note')->nullable();
+            $table->text('location_update_review_note')->nullable();
+            $table->timestamp('location_update_requested_at')->nullable();
+            $table->timestamp('location_update_reviewed_at')->nullable();
             // active | inactive | busy
             $table->string('status')->default('active')->index();
             $table->timestamps();

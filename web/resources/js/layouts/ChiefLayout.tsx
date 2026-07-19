@@ -17,6 +17,32 @@ const navItems: PortalNavItem[] = [
         ),
     },
     {
+        label: 'Response Requests',
+        href: '/chief/requests',
+        icon: (
+            <path
+                d="M12 3 3.8 18h16.4L12 3Zm0 5v4.5m0 3v.1"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        ),
+    },
+    {
+        label: 'Station Location',
+        href: '/chief/station-location',
+        icon: (
+            <path
+                d="M12 21s6-5.2 6-11a6 6 0 1 0-12 0c0 5.8 6 11 6 11Zm0-8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        ),
+    },
+    {
         label: 'Staff Accounts',
         href: '/chief/staff',
         icon: (

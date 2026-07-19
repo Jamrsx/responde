@@ -383,6 +383,106 @@ class StationController extends Controller
         return back()->with('success', "{$station->name} was rejected.");
     }
 
+    public function approveLocationUpdate(
+        Request $request,
+        Station $station,
+    ): RedirectResponse {
+        $lgu = $this->currentLgu($request);
+        $this->assertOwnedStation($station, $lgu->id);
+
+        if (
+            $station->location_update_status !== 'pending'
+            || $station->proposed_latitude === null
+            || $station->proposed_longitude === null
+        ) {
+            return back()->with('error', 'This station has no pending location request.');
+        }
+
+        $oldValues = $station->only([
+            'latitude',
+            'longitude',
+            'location_update_status',
+        ]);
+
+        $station->update([
+            'latitude' => $station->proposed_latitude,
+            'longitude' => $station->proposed_longitude,
+            'location_update_status' => 'approved',
+            'location_update_review_note' => null,
+            'location_update_reviewed_at' => now(),
+        ]);
+
+        AuditLog::query()->create([
+            'user_id' => $request->user()?->id,
+            'action' => 'station.location_update_approved',
+            'auditable_type' => Station::class,
+            'auditable_id' => $station->id,
+            'old_values' => $oldValues,
+            'new_values' => $station->fresh()?->only([
+                'latitude',
+                'longitude',
+                'location_update_status',
+            ]),
+        ]);
+
+        Log::info('LGU approved a station location update.', [
+            'station_id' => $station->id,
+            'actor_user_id' => $request->user()?->id,
+        ]);
+
+        return back()->with(
+            'success',
+            "{$station->name}'s map location was updated.",
+        );
+    }
+
+    public function rejectLocationUpdate(
+        Request $request,
+        Station $station,
+    ): RedirectResponse {
+        $lgu = $this->currentLgu($request);
+        $this->assertOwnedStation($station, $lgu->id);
+
+        if ($station->location_update_status !== 'pending') {
+            return back()->with('error', 'This station has no pending location request.');
+        }
+
+        $validated = $request->validate([
+            'review_note' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'review_note.max' => 'The review note must be 1,000 characters or fewer.',
+        ]);
+
+        $station->update([
+            'location_update_status' => 'rejected',
+            'location_update_review_note' => $validated['review_note'] ?? null,
+            'location_update_reviewed_at' => now(),
+        ]);
+
+        AuditLog::query()->create([
+            'user_id' => $request->user()?->id,
+            'action' => 'station.location_update_rejected',
+            'auditable_type' => Station::class,
+            'auditable_id' => $station->id,
+            'new_values' => $station->fresh()?->only([
+                'proposed_latitude',
+                'proposed_longitude',
+                'location_update_status',
+                'location_update_review_note',
+            ]),
+        ]);
+
+        Log::info('LGU rejected a station location update.', [
+            'station_id' => $station->id,
+            'actor_user_id' => $request->user()?->id,
+        ]);
+
+        return back()->with(
+            'success',
+            "{$station->name}'s location request was rejected.",
+        );
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -404,6 +504,13 @@ class StationController extends Controller
             'address' => $station->address,
             'latitude' => $station->latitude,
             'longitude' => $station->longitude,
+            'proposed_latitude' => $station->proposed_latitude,
+            'proposed_longitude' => $station->proposed_longitude,
+            'location_update_status' => $station->location_update_status,
+            'location_update_note' => $station->location_update_note,
+            'location_update_review_note' => $station->location_update_review_note,
+            'location_update_requested_at' => $station->location_update_requested_at?->diffForHumans(),
+            'location_update_reviewed_at' => $station->location_update_reviewed_at?->diffForHumans(),
             'status' => $station->status,
             'approval_status' => $station->approval_status,
             'station_type_id' => $station->station_type_id,

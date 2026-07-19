@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { useEffect } from 'react';
 
 import LguLayout from '@/layouts/LguLayout';
@@ -9,6 +9,17 @@ type Stats = {
     stations: number;
     pending_outposts: number;
     stations_without_chief: number;
+};
+
+type SharedPageProps = {
+    notifications?: {
+        pending_location_updates: Array<{
+            id: number;
+            name: string;
+            requested_at: string | null;
+        }>;
+        pending_location_update_count: number;
+    };
 };
 
 type Props = {
@@ -70,9 +81,17 @@ export default function LguDashboard({
     recentStations,
     recentCaptains,
 }: Props) {
+    const { notifications } = usePage<SharedPageProps>().props;
+    const pendingLocationUpdates =
+        notifications?.pending_location_updates ?? [];
+
     useEffect(() => {
-        console.log('[Responde LGU] Dashboard loaded', { lgu, stats });
-    }, [lgu, stats]);
+        console.log('[Responde LGU] Dashboard loaded', {
+            lgu,
+            stats,
+            pendingLocationUpdates: pendingLocationUpdates.length,
+        });
+    }, [lgu, pendingLocationUpdates.length, stats]);
 
     return (
         <LguLayout
@@ -98,6 +117,37 @@ export default function LguDashboard({
             <Head title="LGU Dashboard" />
 
             <div className="space-y-6">
+                {pendingLocationUpdates.length > 0 && (
+                    <section
+                        role="status"
+                        className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-900"
+                    >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <p className="font-semibold">
+                                    {pendingLocationUpdates.length} station
+                                    location update
+                                    {pendingLocationUpdates.length === 1
+                                        ? ''
+                                        : 's'}{' '}
+                                    waiting
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-red-800">
+                                    {pendingLocationUpdates
+                                        .map((station) => station.name)
+                                        .join(', ')}
+                                </p>
+                            </div>
+                            <Link
+                                href="/lgu/stations"
+                                className="inline-flex min-h-10 items-center rounded-lg bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-700"
+                            >
+                                Review on Stations
+                            </Link>
+                        </div>
+                    </section>
+                )}
+
                 <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div className="bg-gradient-to-r from-brand to-brand-dark px-5 py-6 sm:px-7">
                         <p className="text-sm text-white/80">Assigned LGU</p>
