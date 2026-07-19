@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css';
 
 import { inputClassName } from '@/components/admin/FormField';
 import { buildOutsideMask, OUTSIDE_MASK_STYLE } from '@/lib/mapMask';
+import { MAP_FIT_MAX_ZOOM, MAP_MAX_ZOOM } from '@/lib/mapZoom';
 
 export type BarangayFeatureProps = {
     psgc: string;
@@ -44,13 +45,21 @@ function FitBounds({
         const bounds = L.geoJSON(collection).getBounds();
         doneRef.current = true;
         map.invalidateSize();
-        map.fitBounds(bounds, { padding: [36, 36], maxZoom: 13 });
+        map.fitBounds(bounds, { padding: [36, 36], maxZoom: MAP_FIT_MAX_ZOOM });
 
         // Keep the view locked to the assigned LGU only.
         const lockedBounds = bounds.pad(0.15);
         map.setMaxBounds(lockedBounds);
-        map.setMinZoom(map.getBoundsZoom(lockedBounds));
-        console.log('[Responde LGU] Map view locked to LGU bounds');
+        map.setMaxZoom(MAP_MAX_ZOOM);
+        const minZoom = Math.min(
+            map.getBoundsZoom(lockedBounds),
+            MAP_MAX_ZOOM - 2,
+        );
+        map.setMinZoom(minZoom);
+        console.log('[Responde LGU] Map view locked to LGU bounds', {
+            minZoom,
+            maxZoom: MAP_MAX_ZOOM,
+        });
     }, [collection, map]);
 
     return null;
@@ -289,12 +298,15 @@ export default function BarangayMapPicker({
                     center={center ?? [12.8797, 121.774]}
                     zoom={center ? 12 : 6}
                     minZoom={5}
+                    maxZoom={MAP_MAX_ZOOM}
                     preferCanvas
                     className="z-0 h-[min(72vh,760px)] w-full min-h-[460px]"
                 >
                     <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        maxZoom={MAP_MAX_ZOOM}
+                        maxNativeZoom={MAP_MAX_ZOOM}
                     />
                     <FitBounds collection={collection} />
                     {outsideMask && (

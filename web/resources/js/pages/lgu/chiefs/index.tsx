@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import FormField, { inputClassName } from '@/components/admin/FormField';
@@ -73,6 +73,18 @@ const emptyForm = {
     password_confirmation: '',
 };
 
+function generatePassword(length = 12): string {
+    const alphabet =
+        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$';
+    const values = new Uint32Array(length);
+    crypto.getRandomValues(values);
+
+    return Array.from(
+        values,
+        (value) => alphabet[value % alphabet.length],
+    ).join('');
+}
+
 function StatCard({
     label,
     value,
@@ -91,12 +103,95 @@ function StatCard({
 
     return (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className={`inline-flex rounded-lg px-2 py-1 text-xs font-semibold ${tones[tone]}`}>
+            <p
+                className={`inline-flex rounded-lg px-2 py-1 text-xs font-semibold ${tones[tone]}`}
+            >
                 {label}
             </p>
             <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
                 {value}
             </p>
+        </div>
+    );
+}
+
+function PasswordFields({
+    idPrefix,
+    password,
+    confirmation,
+    passwordError,
+    showPassword,
+    onToggleShow,
+    onPasswordChange,
+    onConfirmationChange,
+    onGenerate,
+}: {
+    idPrefix: string;
+    password: string;
+    confirmation: string;
+    passwordError?: string;
+    showPassword: boolean;
+    onToggleShow: () => void;
+    onPasswordChange: (value: string) => void;
+    onConfirmationChange: (value: string) => void;
+    onGenerate: () => void;
+}) {
+    return (
+        <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-slate-700">Password</p>
+                <button
+                    type="button"
+                    onClick={onGenerate}
+                    className="text-xs font-semibold text-brand hover:underline"
+                >
+                    Generate password
+                </button>
+            </div>
+            <FormField
+                label="Password"
+                htmlFor={`${idPrefix}-password`}
+                error={passwordError}
+            >
+                <div className="flex gap-2">
+                    <input
+                        id={`${idPrefix}-password`}
+                        type={showPassword ? 'text' : 'password'}
+                        className={inputClassName}
+                        value={password}
+                        onChange={(event) =>
+                            onPasswordChange(event.target.value)
+                        }
+                        required
+                        minLength={8}
+                        autoComplete="new-password"
+                    />
+                    <button
+                        type="button"
+                        onClick={onToggleShow}
+                        className="min-h-11 shrink-0 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                        {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                </div>
+            </FormField>
+            <FormField
+                label="Confirm password"
+                htmlFor={`${idPrefix}-password-confirm`}
+            >
+                <input
+                    id={`${idPrefix}-password-confirm`}
+                    type={showPassword ? 'text' : 'password'}
+                    className={inputClassName}
+                    value={confirmation}
+                    onChange={(event) =>
+                        onConfirmationChange(event.target.value)
+                    }
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                />
+            </FormField>
         </div>
     );
 }
@@ -113,8 +208,12 @@ export default function LguChiefsIndex({
     const [selectedStationId, setSelectedStationId] = useState<number | null>(
         null,
     );
-    const [showCreate, setShowCreate] = useState(false);
+    const [assigning, setAssigning] = useState(false);
     const [replacing, setReplacing] = useState<Chief | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showReplacePassword, setShowReplacePassword] = useState(false);
+    const [successNote, setSuccessNote] = useState<string | null>(null);
+    const assignPanelRef = useRef<HTMLElement | null>(null);
     const form = useForm(emptyForm);
     const replaceForm = useForm({
         name: '',
@@ -131,7 +230,7 @@ export default function LguChiefsIndex({
 
         const first = stations[0];
 
-        if (first) {
+        if (first?.latitude && first.longitude) {
             return [Number(first.latitude), Number(first.longitude)];
         }
 
@@ -184,6 +283,11 @@ export default function LguChiefsIndex({
         });
     }, [chiefs, search]);
 
+    const needingChief = useMemo(
+        () => filteredStations.filter((station) => !station.has_chief),
+        [filteredStations],
+    );
+
     const markers = useMemo(
         () =>
             filteredStations
@@ -212,7 +316,30 @@ export default function LguChiefsIndex({
     const selectedStation =
         stations.find((station) => station.id === selectedStationId) ?? null;
 
-    const openCreate = (stationId?: number) => {
+    const assigningStation =
+        stations.find(
+            (station) => String(station.id) === String(form.data.station_id),
+        ) ?? null;
+
+    useEffect(() => {
+        if (!assigning) {
+            return;
+        }
+
+        assignPanelRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+        });
+    }, [assigning, form.data.station_id]);
+
+    const closeAssign = () => {
+        setAssigning(false);
+        form.reset();
+        form.clearErrors();
+        setShowPassword(false);
+    };
+
+    const openAssign = (stationId?: number) => {
         const targetId =
             stationId ??
             selectedStationId ??
@@ -220,16 +347,76 @@ export default function LguChiefsIndex({
             null;
 
         if (!targetId) {
+            setSuccessNote(null);
+            window.alert(
+                'All stations already have a chief. Select a chief account to replace one.',
+            );
+
             return;
         }
 
+        const station = stations.find((item) => item.id === targetId);
+
+        if (station?.has_chief) {
+            setSelectedStationId(targetId);
+            setAssigning(false);
+            console.log(
+                '[Responde LGU] Station already has chief — select only',
+                targetId,
+            );
+
+            return;
+        }
+
+        setSelectedStationId(targetId);
         form.setData({
             ...emptyForm,
             station_id: String(targetId),
         });
         form.clearErrors();
-        setShowCreate(true);
-        console.log('[Responde LGU] Opening add chief for station', targetId);
+        setShowPassword(false);
+        setSuccessNote(null);
+        setAssigning(true);
+        console.log('[Responde LGU] Opening assign chief panel', targetId);
+    };
+
+    const handleStationSelect = (stationId: number) => {
+        setSelectedStationId(stationId);
+        const station = stations.find((item) => item.id === stationId);
+
+        if (station && !station.has_chief) {
+            openAssign(stationId);
+
+            return;
+        }
+
+        if (assigning) {
+            closeAssign();
+        }
+
+        console.log('[Responde LGU] Selected station', stationId);
+    };
+
+    const applyGeneratedPassword = () => {
+        const password = generatePassword();
+        form.setData((data) => ({
+            ...data,
+            password,
+            password_confirmation: password,
+        }));
+        setShowPassword(true);
+        console.log('[Responde LGU] Generated chief password');
+    };
+
+    const applyReplaceGeneratedPassword = () => {
+        const password = generatePassword();
+        replaceForm.setData((data) => ({
+            ...data,
+            password,
+            password_confirmation: password,
+        }));
+        setShowReplacePassword(true);
+        console.log('[Responde LGU] Generated replace chief password');
     };
 
     const submitCreate = (event: FormEvent) => {
@@ -237,7 +424,11 @@ export default function LguChiefsIndex({
         console.log('[Responde LGU] Creating station chief', form.data);
         form.post('/lgu/chiefs', {
             preserveScroll: true,
-            onSuccess: () => setShowCreate(false),
+            onSuccess: () => {
+                const stationName = assigningStation?.name ?? 'station';
+                setSuccessNote(`Chief assigned to ${stationName}.`);
+                closeAssign();
+            },
         });
     };
 
@@ -251,7 +442,11 @@ export default function LguChiefsIndex({
         console.log('[Responde LGU] Replacing chief', replacing.id);
         replaceForm.post(`/lgu/chiefs/${replacing.id}/replace`, {
             preserveScroll: true,
-            onSuccess: () => setReplacing(null),
+            onSuccess: () => {
+                setSuccessNote(`Chief replaced for ${replacing.station}.`);
+                setReplacing(null);
+                setShowReplacePassword(false);
+            },
         });
     };
 
@@ -260,16 +455,6 @@ export default function LguChiefsIndex({
             title="Station Chiefs"
             description={`Assign one chief per station in ${lgu.name}`}
             fullWidth
-            actions={
-                <button
-                    type="button"
-                    onClick={() => openCreate()}
-                    disabled={stationsWithoutChief.length === 0}
-                    className="inline-flex min-h-11 items-center rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
-                >
-                    Add chief
-                </button>
-            }
         >
             <Head title="LGU Chiefs" />
 
@@ -296,10 +481,16 @@ export default function LguChiefsIndex({
                 />
             </div>
 
-            {stats.withoutChief > 0 && (
-                <section className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
-                    {stats.withoutChief} station(s) still need a chief. Search
-                    or click a yellow marker to assign one.
+            {successNote && (
+                <section className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm text-emerald-800">
+                    {successNote}
+                </section>
+            )}
+
+            {stats.withoutChief > 0 && !assigning && (
+                <section className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+                    {stats.withoutChief} station(s) still need a chief. Click an
+                    amber marker or a station in the list to assign one.
                 </section>
             )}
 
@@ -321,40 +512,226 @@ export default function LguChiefsIndex({
                 )}
             </div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.9fr)]">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.95fr)]">
                 <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-                    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-                        <div>
-                            <h2 className="text-base font-bold text-slate-900">
-                                Stations map
-                            </h2>
-                            <p className="mt-0.5 text-xs text-slate-500">
-                                Green = has chief · Amber = needs chief · Blue =
-                                selected
-                            </p>
-                        </div>
+                    <div className="mb-3">
+                        <h2 className="text-base font-bold text-slate-900">
+                            Stations map
+                        </h2>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                            Click amber = assign chief · Green = already has
+                            chief · Blue = selected
+                        </p>
                     </div>
                     <StationPointMap
                         center={center}
                         markers={markers}
                         pickEnabled={false}
                         fitMarkers
+                        focusMarkerId={selectedStationId}
                         boundaryUrl={mapUrl}
                         onMarkerClick={(markerId) => {
-                            const id = Number(markerId);
-                            setSelectedStationId(id);
-                            console.log(
-                                '[Responde LGU] Selected station from map',
-                                id,
-                            );
+                            handleStationSelect(Number(markerId));
                         }}
-                        className="h-[min(68vh,720px)] w-full min-h-[420px]"
+                        className="h-[min(68vh,720px)] min-h-[420px] w-full"
                     />
                 </section>
 
                 <section className="space-y-4">
-                    {selectedStation && (
-                        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                    {assigning ? (
+                        <section
+                            ref={assignPanelRef}
+                            className="rounded-2xl border border-brand/30 bg-white p-5 shadow-sm ring-1 ring-brand/10"
+                        >
+                            <div className="mb-4 flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-semibold tracking-wide text-brand uppercase">
+                                        Assign chief
+                                    </p>
+                                    <h2 className="mt-1 text-base font-bold text-slate-900">
+                                        {assigningStation?.name ??
+                                            'Select a station'}
+                                    </h2>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                        {[
+                                            assigningStation?.type,
+                                            assigningStation?.barangay,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' · ') ||
+                                            'Fill in the chief details below'}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closeAssign}
+                                    className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                                >
+                                    Close
+                                </button>
+                            </div>
+
+                            <form onSubmit={submitCreate} className="space-y-4">
+                                {stationsWithoutChief.length > 1 && (
+                                    <FormField
+                                        label="Station"
+                                        htmlFor="chief-station"
+                                        error={form.errors.station_id}
+                                    >
+                                        <select
+                                            id="chief-station"
+                                            className={inputClassName}
+                                            value={form.data.station_id}
+                                            onChange={(event) => {
+                                                const nextId = Number(
+                                                    event.target.value,
+                                                );
+                                                setSelectedStationId(nextId);
+                                                form.setData(
+                                                    'station_id',
+                                                    event.target.value,
+                                                );
+                                                console.log(
+                                                    '[Responde LGU] Assign panel station changed',
+                                                    nextId,
+                                                );
+                                            }}
+                                            required
+                                        >
+                                            {stationsWithoutChief.map(
+                                                (station) => (
+                                                    <option
+                                                        key={station.id}
+                                                        value={station.id}
+                                                    >
+                                                        {station.name}
+                                                        {station.type
+                                                            ? ` · ${station.type}`
+                                                            : ''}
+                                                    </option>
+                                                ),
+                                            )}
+                                        </select>
+                                    </FormField>
+                                )}
+
+                                <FormField
+                                    label="Full name"
+                                    htmlFor="chief-name"
+                                    error={form.errors.name}
+                                >
+                                    <input
+                                        id="chief-name"
+                                        className={inputClassName}
+                                        value={form.data.name}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'name',
+                                                event.target.value,
+                                            )
+                                        }
+                                        required
+                                        placeholder="Chief full name"
+                                        autoFocus
+                                    />
+                                </FormField>
+
+                                <FormField
+                                    label="Email"
+                                    htmlFor="chief-email"
+                                    error={form.errors.email}
+                                >
+                                    <input
+                                        id="chief-email"
+                                        type="email"
+                                        className={inputClassName}
+                                        value={form.data.email}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'email',
+                                                event.target.value,
+                                            )
+                                        }
+                                        required
+                                        placeholder="chief@example.com"
+                                    />
+                                </FormField>
+
+                                <FormField
+                                    label="Phone"
+                                    htmlFor="chief-phone"
+                                    error={form.errors.phone}
+                                >
+                                    <input
+                                        id="chief-phone"
+                                        className={inputClassName}
+                                        value={form.data.phone}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'phone',
+                                                event.target.value.replace(
+                                                    /\D/g,
+                                                    '',
+                                                ),
+                                            )
+                                        }
+                                        inputMode="numeric"
+                                        maxLength={11}
+                                        placeholder="09XXXXXXXXX"
+                                    />
+                                </FormField>
+
+                                <PasswordFields
+                                    idPrefix="chief"
+                                    password={form.data.password}
+                                    confirmation={
+                                        form.data.password_confirmation
+                                    }
+                                    passwordError={form.errors.password}
+                                    showPassword={showPassword}
+                                    onToggleShow={() =>
+                                        setShowPassword((value) => !value)
+                                    }
+                                    onPasswordChange={(value) =>
+                                        form.setData('password', value)
+                                    }
+                                    onConfirmationChange={(value) =>
+                                        form.setData(
+                                            'password_confirmation',
+                                            value,
+                                        )
+                                    }
+                                    onGenerate={applyGeneratedPassword}
+                                />
+
+                                <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={closeAssign}
+                                        className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={form.processing}
+                                        className="min-h-11 rounded-lg bg-brand px-5 text-sm font-semibold text-white disabled:opacity-60"
+                                    >
+                                        {form.processing
+                                            ? 'Assigning...'
+                                            : 'Assign chief'}
+                                    </button>
+                                </div>
+                            </form>
+                        </section>
+                    ) : selectedStation ? (
+                        <div
+                            className={`rounded-2xl border p-4 ${
+                                selectedStation.has_chief
+                                    ? 'border-emerald-200 bg-emerald-50'
+                                    : 'border-amber-200 bg-amber-50'
+                            }`}
+                        >
                             <p className="text-sm font-bold text-slate-900">
                                 {selectedStation.name}
                             </p>
@@ -367,39 +744,46 @@ export default function LguChiefsIndex({
                                     .join(' · ') || 'Station details'}
                             </p>
                             {selectedStation.chief ? (
-                                <p className="mt-2 text-xs text-emerald-700">
+                                <p className="mt-2 text-xs font-semibold text-emerald-700">
                                     Chief: {selectedStation.chief.name}
                                 </p>
                             ) : (
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        openCreate(selectedStation.id)
-                                    }
-                                    className="mt-3 min-h-10 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-dark"
-                                >
-                                    Add chief for this station
-                                </button>
+                                <p className="mt-2 text-xs font-semibold text-amber-700">
+                                    No chief yet — tap the station again to
+                                    assign one.
+                                </p>
                             )}
+                        </div>
+                    ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                            Click a station on the map or in the list to get
+                            started.
                         </div>
                     )}
 
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <h2 className="mb-4 text-base font-bold text-slate-900">
-                            Stations ({filteredStations.length})
-                        </h2>
+                        <div className="mb-4 flex items-center justify-between gap-2">
+                            <h2 className="text-base font-bold text-slate-900">
+                                Stations ({filteredStations.length})
+                            </h2>
+                            {needingChief.length > 0 && (
+                                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                                    {needingChief.length} need chief
+                                </span>
+                            )}
+                        </div>
                         {filteredStations.length === 0 ? (
                             <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                                 No stations match your search.
                             </p>
                         ) : (
-                            <ul className="max-h-[40vh] space-y-2 overflow-y-auto">
+                            <ul className="max-h-[36vh] space-y-2 overflow-y-auto">
                                 {filteredStations.map((station) => (
                                     <li key={station.id}>
                                         <button
                                             type="button"
                                             onClick={() =>
-                                                setSelectedStationId(station.id)
+                                                handleStationSelect(station.id)
                                             }
                                             className={`w-full rounded-xl border px-3 py-3 text-left transition ${
                                                 selectedStationId === station.id
@@ -424,7 +808,7 @@ export default function LguChiefsIndex({
                                                     <p className="mt-1 text-xs text-slate-600">
                                                         {station.chief
                                                             ? `Chief: ${station.chief.name}`
-                                                            : 'No chief assigned'}
+                                                            : 'Tap to assign a chief'}
                                                     </p>
                                                 </div>
                                                 <span
@@ -454,10 +838,10 @@ export default function LguChiefsIndex({
                             <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                                 {search.trim()
                                     ? 'No chiefs match your search.'
-                                    : 'No station chiefs yet.'}
+                                    : 'No station chiefs yet. Assign one from the map or list.'}
                             </p>
                         ) : (
-                            <ul className="max-h-[35vh] divide-y divide-slate-100 overflow-y-auto">
+                            <ul className="max-h-[30vh] divide-y divide-slate-100 overflow-y-auto">
                                 {filteredChiefs.map((chief) => (
                                     <li
                                         key={chief.id}
@@ -497,6 +881,9 @@ export default function LguChiefsIndex({
                                                     setReplacing(chief);
                                                     replaceForm.reset();
                                                     replaceForm.clearErrors();
+                                                    setShowReplacePassword(
+                                                        false,
+                                                    );
                                                 }}
                                                 className="min-h-10 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700"
                                             >
@@ -516,8 +903,7 @@ export default function LguChiefsIndex({
                                                     router.delete(
                                                         `/lgu/chiefs/${chief.id}`,
                                                         {
-                                                            preserveScroll:
-                                                                true,
+                                                            preserveScroll: true,
                                                         },
                                                     );
                                                 }}
@@ -535,141 +921,12 @@ export default function LguChiefsIndex({
             </div>
 
             <Modal
-                show={showCreate}
-                title="Add station chief"
-                onClose={() => setShowCreate(false)}
-            >
-                <form onSubmit={submitCreate} className="space-y-4">
-                    <FormField label="Station" htmlFor="chief-station">
-                        <select
-                            id="chief-station"
-                            className={inputClassName}
-                            value={form.data.station_id}
-                            onChange={(event) =>
-                                form.setData('station_id', event.target.value)
-                            }
-                            required
-                        >
-                            {stationsWithoutChief.map((station) => (
-                                <option key={station.id} value={station.id}>
-                                    {station.name}
-                                    {station.type ? ` · ${station.type}` : ''}
-                                </option>
-                            ))}
-                        </select>
-                    </FormField>
-                    <FormField
-                        label="Full name"
-                        htmlFor="chief-name"
-                        error={form.errors.name}
-                    >
-                        <input
-                            id="chief-name"
-                            className={inputClassName}
-                            value={form.data.name}
-                            onChange={(event) =>
-                                form.setData('name', event.target.value)
-                            }
-                            required
-                        />
-                    </FormField>
-                    <FormField
-                        label="Email"
-                        htmlFor="chief-email"
-                        error={form.errors.email}
-                    >
-                        <input
-                            id="chief-email"
-                            type="email"
-                            className={inputClassName}
-                            value={form.data.email}
-                            onChange={(event) =>
-                                form.setData('email', event.target.value)
-                            }
-                            required
-                        />
-                    </FormField>
-                    <FormField
-                        label="Phone"
-                        htmlFor="chief-phone"
-                        error={form.errors.phone}
-                    >
-                        <input
-                            id="chief-phone"
-                            className={inputClassName}
-                            value={form.data.phone}
-                            onChange={(event) =>
-                                form.setData(
-                                    'phone',
-                                    event.target.value.replace(/\D/g, ''),
-                                )
-                            }
-                            maxLength={11}
-                            placeholder="09XXXXXXXXX"
-                        />
-                    </FormField>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField
-                            label="Password"
-                            htmlFor="chief-password"
-                            error={form.errors.password}
-                        >
-                            <input
-                                id="chief-password"
-                                type="password"
-                                className={inputClassName}
-                                value={form.data.password}
-                                onChange={(event) =>
-                                    form.setData(
-                                        'password',
-                                        event.target.value,
-                                    )
-                                }
-                                required
-                            />
-                        </FormField>
-                        <FormField
-                            label="Confirm password"
-                            htmlFor="chief-password-confirm"
-                        >
-                            <input
-                                id="chief-password-confirm"
-                                type="password"
-                                className={inputClassName}
-                                value={form.data.password_confirmation}
-                                onChange={(event) =>
-                                    form.setData(
-                                        'password_confirmation',
-                                        event.target.value,
-                                    )
-                                }
-                                required
-                            />
-                        </FormField>
-                    </div>
-                    <div className="flex justify-end gap-3">
-                        <button
-                            type="button"
-                            onClick={() => setShowCreate(false)}
-                            className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={form.processing}
-                            className="min-h-11 rounded-lg bg-brand px-5 text-sm font-semibold text-white disabled:opacity-60"
-                        >
-                            {form.processing ? 'Creating...' : 'Create chief'}
-                        </button>
-                    </div>
-                </form>
-            </Modal>
-
-            <Modal
                 show={replacing !== null}
                 title="Replace station chief"
-                onClose={() => setReplacing(null)}
+                onClose={() => {
+                    setReplacing(null);
+                    setShowReplacePassword(false);
+                }}
             >
                 {replacing && (
                     <form onSubmit={submitReplace} className="space-y-4">
@@ -733,54 +990,40 @@ export default function LguChiefsIndex({
                                         event.target.value.replace(/\D/g, ''),
                                     )
                                 }
+                                inputMode="numeric"
                                 maxLength={11}
+                                placeholder="09XXXXXXXXX"
                             />
                         </FormField>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <FormField
-                                label="Password"
-                                htmlFor="replace-password"
-                                error={replaceForm.errors.password}
-                            >
-                                <input
-                                    id="replace-password"
-                                    type="password"
-                                    className={inputClassName}
-                                    value={replaceForm.data.password}
-                                    onChange={(event) =>
-                                        replaceForm.setData(
-                                            'password',
-                                            event.target.value,
-                                        )
-                                    }
-                                    required
-                                />
-                            </FormField>
-                            <FormField
-                                label="Confirm password"
-                                htmlFor="replace-password-confirm"
-                            >
-                                <input
-                                    id="replace-password-confirm"
-                                    type="password"
-                                    className={inputClassName}
-                                    value={
-                                        replaceForm.data.password_confirmation
-                                    }
-                                    onChange={(event) =>
-                                        replaceForm.setData(
-                                            'password_confirmation',
-                                            event.target.value,
-                                        )
-                                    }
-                                    required
-                                />
-                            </FormField>
-                        </div>
+                        <PasswordFields
+                            idPrefix="replace"
+                            password={replaceForm.data.password}
+                            confirmation={
+                                replaceForm.data.password_confirmation
+                            }
+                            passwordError={replaceForm.errors.password}
+                            showPassword={showReplacePassword}
+                            onToggleShow={() =>
+                                setShowReplacePassword((value) => !value)
+                            }
+                            onPasswordChange={(value) =>
+                                replaceForm.setData('password', value)
+                            }
+                            onConfirmationChange={(value) =>
+                                replaceForm.setData(
+                                    'password_confirmation',
+                                    value,
+                                )
+                            }
+                            onGenerate={applyReplaceGeneratedPassword}
+                        />
                         <div className="flex justify-end gap-3">
                             <button
                                 type="button"
-                                onClick={() => setReplacing(null)}
+                                onClick={() => {
+                                    setReplacing(null);
+                                    setShowReplacePassword(false);
+                                }}
                                 className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm"
                             >
                                 Cancel

@@ -1,5 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import FormField, { inputClassName } from '@/components/admin/FormField';
@@ -22,12 +22,25 @@ type Props = {
     mapUrl: string | null;
 };
 
+function generatePassword(length = 12): string {
+    const alphabet =
+        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$';
+    const values = new Uint32Array(length);
+    crypto.getRandomValues(values);
+
+    return Array.from(
+        values,
+        (value) => alphabet[value % alphabet.length],
+    ).join('');
+}
+
 export default function LguStationsCreate({
     lgu,
     stationTypes,
     barangays,
     mapUrl,
 }: Props) {
+    const [showChiefPassword, setShowChiefPassword] = useState(false);
     const center = useMemo<[number, number]>(() => {
         if (lgu.latitude && lgu.longitude) {
             return [Number(lgu.latitude), Number(lgu.longitude)];
@@ -46,6 +59,12 @@ export default function LguStationsCreate({
         latitude: String(center[0]),
         longitude: String(center[1]),
         status: 'active',
+        assign_chief: true,
+        chief_name: '',
+        chief_email: '',
+        chief_phone: '',
+        chief_password: '',
+        chief_password_confirmation: '',
     });
 
     const selectedType = stationTypes.find(
@@ -59,8 +78,25 @@ export default function LguStationsCreate({
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
-        console.log('[Responde LGU] Creating station from page', form.data);
+        console.log('[Responde LGU] Creating station from page', {
+            ...form.data,
+            chief_password: form.data.chief_password ? '[provided]' : '',
+            chief_password_confirmation: form.data.chief_password_confirmation
+                ? '[provided]'
+                : '',
+        });
         form.post('/lgu/stations');
+    };
+
+    const applyGeneratedPassword = () => {
+        const password = generatePassword();
+        form.setData((data) => ({
+            ...data,
+            chief_password: password,
+            chief_password_confirmation: password,
+        }));
+        setShowChiefPassword(true);
+        console.log('[Responde LGU] Generated station chief password');
     };
 
     return (
@@ -84,7 +120,7 @@ export default function LguStationsCreate({
                 className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6"
             >
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.9fr)]">
-                    <section>
+                    <section className="self-start xl:sticky xl:top-4">
                         <h2 className="mb-1 text-base font-bold text-slate-900">
                             Station location
                         </h2>
@@ -304,6 +340,196 @@ export default function LguStationsCreate({
                             />
                         </FormField>
 
+                        <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <label
+                                htmlFor="assign-chief"
+                                className="flex cursor-pointer items-start justify-between gap-4"
+                            >
+                                <span>
+                                    <span className="block text-sm font-bold text-slate-900">
+                                        Assign station chief now
+                                    </span>
+                                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                                        Create the chief account together with
+                                        this station.
+                                    </span>
+                                </span>
+                                <input
+                                    id="assign-chief"
+                                    type="checkbox"
+                                    checked={form.data.assign_chief}
+                                    onChange={(event) => {
+                                        form.setData(
+                                            'assign_chief',
+                                            event.target.checked,
+                                        );
+                                        form.clearErrors(
+                                            'chief_name',
+                                            'chief_email',
+                                            'chief_phone',
+                                            'chief_password',
+                                        );
+                                        console.log(
+                                            '[Responde LGU] Assign chief with station',
+                                            event.target.checked,
+                                        );
+                                    }}
+                                    className="mt-0.5 h-5 w-5 rounded border-slate-300 text-brand focus:ring-brand"
+                                />
+                            </label>
+
+                            {form.data.assign_chief && (
+                                <div className="mt-4 space-y-4 border-t border-slate-200 pt-4">
+                                    <FormField
+                                        label="Chief full name"
+                                        htmlFor="create-chief-name"
+                                        error={form.errors.chief_name}
+                                    >
+                                        <input
+                                            id="create-chief-name"
+                                            className={inputClassName}
+                                            value={form.data.chief_name}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'chief_name',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="Chief full name"
+                                            required
+                                        />
+                                    </FormField>
+
+                                    <FormField
+                                        label="Chief email"
+                                        htmlFor="create-chief-email"
+                                        error={form.errors.chief_email}
+                                    >
+                                        <input
+                                            id="create-chief-email"
+                                            type="email"
+                                            className={inputClassName}
+                                            value={form.data.chief_email}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'chief_email',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="chief@example.com"
+                                            required
+                                        />
+                                    </FormField>
+
+                                    <FormField
+                                        label="Chief phone"
+                                        htmlFor="create-chief-phone"
+                                        error={form.errors.chief_phone}
+                                    >
+                                        <input
+                                            id="create-chief-phone"
+                                            className={inputClassName}
+                                            value={form.data.chief_phone}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'chief_phone',
+                                                    event.target.value.replace(
+                                                        /\D/g,
+                                                        '',
+                                                    ),
+                                                )
+                                            }
+                                            inputMode="numeric"
+                                            maxLength={11}
+                                            placeholder="09XXXXXXXXX"
+                                        />
+                                    </FormField>
+
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="text-sm font-medium text-slate-700">
+                                            Account password
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={applyGeneratedPassword}
+                                            className="text-xs font-semibold text-brand hover:underline"
+                                        >
+                                            Generate password
+                                        </button>
+                                    </div>
+
+                                    <FormField
+                                        label="Password"
+                                        htmlFor="create-chief-password"
+                                        error={form.errors.chief_password}
+                                    >
+                                        <div className="flex gap-2">
+                                            <input
+                                                id="create-chief-password"
+                                                type={
+                                                    showChiefPassword
+                                                        ? 'text'
+                                                        : 'password'
+                                                }
+                                                className={inputClassName}
+                                                value={form.data.chief_password}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'chief_password',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                minLength={8}
+                                                required
+                                                autoComplete="new-password"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setShowChiefPassword(
+                                                        (value) => !value,
+                                                    )
+                                                }
+                                                className="min-h-11 shrink-0 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                            >
+                                                {showChiefPassword
+                                                    ? 'Hide'
+                                                    : 'Show'}
+                                            </button>
+                                        </div>
+                                    </FormField>
+
+                                    <FormField
+                                        label="Confirm password"
+                                        htmlFor="create-chief-password-confirm"
+                                    >
+                                        <input
+                                            id="create-chief-password-confirm"
+                                            type={
+                                                showChiefPassword
+                                                    ? 'text'
+                                                    : 'password'
+                                            }
+                                            className={inputClassName}
+                                            value={
+                                                form.data
+                                                    .chief_password_confirmation
+                                            }
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'chief_password_confirmation',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            minLength={8}
+                                            required
+                                            autoComplete="new-password"
+                                        />
+                                    </FormField>
+                                </div>
+                            )}
+                        </section>
+
                         <div className="flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-4">
                             <Link
                                 href="/lgu/stations"
@@ -316,7 +542,11 @@ export default function LguStationsCreate({
                                 disabled={form.processing}
                                 className="min-h-11 rounded-lg bg-brand px-5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
                             >
-                                {form.processing ? 'Saving...' : 'Save station'}
+                                {form.processing
+                                    ? 'Saving...'
+                                    : form.data.assign_chief
+                                      ? 'Save station and chief'
+                                      : 'Save station'}
                             </button>
                         </div>
                     </section>

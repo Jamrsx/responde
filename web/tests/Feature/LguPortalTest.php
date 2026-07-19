@@ -40,6 +40,82 @@ test('lgu admin is redirected to the lgu dashboard', function () {
     ])->assertRedirect(route('lgu.dashboard'));
 });
 
+test('lgu admin can create a station and its chief together', function () {
+    $lgu = Lgu::query()->create([
+        'name' => 'Opol',
+        'psgc_code' => '1043210000',
+        'is_active' => true,
+    ]);
+    $admin = User::factory()->lguAdmin($lgu)->create();
+    $type = StationType::query()->where('code', 'pnp')->firstOrFail();
+
+    $this->withSession(['_token' => 'test-csrf-token'])
+        ->actingAs($admin)
+        ->post(route('lgu.stations.store'), [
+            '_token' => 'test-csrf-token',
+            'station_type_id' => $type->id,
+            'name' => 'Opol Police Station',
+            'contact_number' => '09171234567',
+            'latitude' => 8.5214,
+            'longitude' => 124.5711,
+            'status' => 'active',
+            'assign_chief' => true,
+            'chief_name' => 'Chief Test',
+            'chief_email' => 'chief.station@example.com',
+            'chief_phone' => '09181234567',
+            'chief_password' => 'password123',
+            'chief_password_confirmation' => 'password123',
+        ])
+        ->assertRedirect(route('lgu.stations.index'))
+        ->assertSessionHas('success');
+
+    $station = Station::query()
+        ->where('name', 'Opol Police Station')
+        ->firstOrFail();
+    $chief = User::query()
+        ->where('email', 'chief.station@example.com')
+        ->firstOrFail();
+
+    expect($chief->role)->toBe(UserRole::Chief)
+        ->and($chief->station_id)->toBe($station->id)
+        ->and($chief->lgu_id)->toBe($lgu->id)
+        ->and($station->chief_user_id)->toBe($chief->id)
+        ->and(Hash::check('password123', $chief->password))->toBeTrue();
+});
+
+test('chief details are required when creating a station with a chief', function () {
+    $lgu = Lgu::query()->create([
+        'name' => 'Opol',
+        'psgc_code' => '1043210001',
+        'is_active' => true,
+    ]);
+    $admin = User::factory()->lguAdmin($lgu)->create();
+    $type = StationType::query()->where('code', 'health')->firstOrFail();
+
+    $this->withSession(['_token' => 'test-csrf-token'])
+        ->actingAs($admin)
+        ->from(route('lgu.stations.create'))
+        ->post(route('lgu.stations.store'), [
+            '_token' => 'test-csrf-token',
+            'station_type_id' => $type->id,
+            'name' => 'Opol Health Center',
+            'latitude' => 8.5214,
+            'longitude' => 124.5711,
+            'status' => 'active',
+            'assign_chief' => true,
+        ])
+        ->assertRedirect(route('lgu.stations.create'))
+        ->assertSessionHasErrors([
+            'chief_name',
+            'chief_email',
+            'chief_password',
+        ]);
+
+    $this->assertDatabaseMissing(Station::class, [
+        'name' => 'Opol Health Center',
+    ]);
+});
+
 test('lgu admin can import barangays and create a captain', function () {
     $lgu = Lgu::query()->create([
         'name' => 'City of Cagayan De Oro',

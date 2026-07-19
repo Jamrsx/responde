@@ -5,6 +5,7 @@ import { GeoJSON, MapContainer, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import { inputClassName } from '@/components/admin/FormField';
+import { MAP_FIT_MAX_ZOOM, MAP_MAX_ZOOM } from '@/lib/mapZoom';
 
 const PH_CENTER: [number, number] = [12.8797, 121.774];
 const PH_ZOOM = 6;
@@ -137,7 +138,7 @@ function ZoomToSelectedPsgc({
             map.invalidateSize();
             map.fitBounds(bounds, {
                 padding: [48, 48],
-                maxZoom: 12,
+                maxZoom: MAP_FIT_MAX_ZOOM,
             });
             console.log('[Responde Admin] Zoomed map to selected LGU', {
                 psgc: targetPsgc,
@@ -285,7 +286,7 @@ export default function LguMapPicker({
         if (zoom && mapRef.current) {
             mapRef.current.flyToBounds(bounds, {
                 padding: [24, 24],
-                maxZoom: 11,
+                maxZoom: MAP_FIT_MAX_ZOOM,
                 duration: 0.6,
             });
         }
@@ -427,12 +428,15 @@ export default function LguMapPicker({
                     center={startCenter}
                     zoom={startZoom}
                     minZoom={5}
+                    maxZoom={MAP_MAX_ZOOM}
                     preferCanvas
                     className={`z-0 ${mapClassName}`}
                 >
                     <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        maxZoom={MAP_MAX_ZOOM}
+                        maxNativeZoom={MAP_MAX_ZOOM}
                     />
                     <ZoomToSelectedPsgc
                         psgc={selectedPsgc}

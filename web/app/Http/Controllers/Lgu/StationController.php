@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Lgu;
 
+use App\Actions\Users\CreateStationChiefAccount;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Lgu\Concerns\ResolvesCurrentLgu;
 use App\Http\Requests\Lgu\StoreStationRequest;
@@ -12,6 +13,7 @@ use App\Models\Station;
 use App\Models\StationType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -94,34 +96,64 @@ class StationController extends Controller
         ]);
     }
 
-    public function store(StoreStationRequest $request): RedirectResponse
-    {
+    public function store(
+        StoreStationRequest $request,
+        CreateStationChiefAccount $createStationChiefAccount,
+    ): RedirectResponse {
         $lgu = $this->currentLgu($request);
         $this->assertBarangayBelongsToLgu($request->integer('barangay_id') ?: null, $lgu->id);
+        $validated = $request->validated();
 
-        $station = Station::query()->create([
-            ...$request->validated(),
-            'lgu_id' => $lgu->id,
-            'approval_status' => 'approved',
-            'submitted_by_user_id' => $request->user()?->id,
-        ]);
+        $station = DB::transaction(function () use (
+            $request,
+            $lgu,
+            $validated,
+            $createStationChiefAccount,
+        ): Station {
+            $station = Station::query()->create([
+                'station_type_id' => $validated['station_type_id'],
+                'other_type_name' => $validated['other_type_name'] ?? null,
+                'barangay_id' => $validated['barangay_id'] ?? null,
+                'name' => $validated['name'],
+                'contact_number' => $validated['contact_number'] ?? null,
+                'address' => $validated['address'] ?? null,
+                'latitude' => $validated['latitude'],
+                'longitude' => $validated['longitude'],
+                'status' => $validated['status'],
+                'lgu_id' => $lgu->id,
+                'approval_status' => 'approved',
+                'submitted_by_user_id' => $request->user()?->id,
+            ]);
 
-        AuditLog::query()->create([
-            'user_id' => $request->user()?->id,
-            'action' => 'station.created',
-            'auditable_type' => Station::class,
-            'auditable_id' => $station->id,
-            'new_values' => $station->only([
-                'name',
-                'station_type_id',
-                'other_type_name',
-                'barangay_id',
-                'latitude',
-                'longitude',
-                'status',
-                'approval_status',
-            ]),
-        ]);
+            AuditLog::query()->create([
+                'user_id' => $request->user()?->id,
+                'action' => 'station.created',
+                'auditable_type' => Station::class,
+                'auditable_id' => $station->id,
+                'new_values' => $station->only([
+                    'name',
+                    'station_type_id',
+                    'other_type_name',
+                    'barangay_id',
+                    'latitude',
+                    'longitude',
+                    'status',
+                    'approval_status',
+                ]),
+            ]);
+
+            if ($validated['assign_chief']) {
+                $station->load('stationType:id,code');
+                $createStationChiefAccount->execute($request->user(), $station, [
+                    'name' => $validated['chief_name'],
+                    'email' => $validated['chief_email'],
+                    'password' => $validated['chief_password'],
+                    'phone' => $validated['chief_phone'] ?? null,
+                ]);
+            }
+
+            return $station;
+        });
 
         Log::info('LGU station created.', [
             'station_id' => $station->id,
@@ -129,9 +161,13 @@ class StationController extends Controller
             'actor_user_id' => $request->user()?->id,
         ]);
 
+        $message = $validated['assign_chief']
+            ? "{$station->name} and its chief account were added successfully."
+            : "{$station->name} was added successfully.";
+
         return redirect()
             ->route('lgu.stations.index')
-            ->with('success', "{$station->name} was added successfully.");
+            ->with('success', $message);
     }
 
     public function update(UpdateStationRequest $request, Station $station): RedirectResponse

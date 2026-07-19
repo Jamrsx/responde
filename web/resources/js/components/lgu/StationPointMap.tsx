@@ -12,6 +12,7 @@ import {
 import 'leaflet/dist/leaflet.css';
 
 import { buildOutsideMask, OUTSIDE_MASK_STYLE } from '@/lib/mapMask';
+import { MAP_FIT_MAX_ZOOM, MAP_MAX_ZOOM } from '@/lib/mapZoom';
 
 type StationMarker = {
     id: number | string;
@@ -21,17 +22,10 @@ type StationMarker = {
     color?: string;
 };
 
-function FitMarkers({
-    markers,
-}: {
-    markers: StationMarker[];
-}) {
+function FitMarkers({ markers }: { markers: StationMarker[] }) {
     const map = useMap();
     const markerKey = markers
-        .map(
-            (marker) =>
-                `${marker.id}:${marker.latitude}:${marker.longitude}`,
-        )
+        .map((marker) => `${marker.id}:${marker.latitude}:${marker.longitude}`)
         .join('|');
 
     useEffect(() => {
@@ -45,8 +39,37 @@ function FitMarkers({
             return [Number(lat), Number(lng)] as [number, number];
         });
         const bounds = L.latLngBounds(points);
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+        map.fitBounds(bounds, {
+            padding: [40, 40],
+            maxZoom: MAP_FIT_MAX_ZOOM,
+        });
     }, [markerKey, map]);
+
+    return null;
+}
+
+function FocusMarker({ marker }: { marker: StationMarker | null }) {
+    const map = useMap();
+    const focusKey = marker
+        ? `${marker.id}:${marker.latitude}:${marker.longitude}`
+        : '';
+
+    useEffect(() => {
+        if (!marker || !focusKey) {
+            return;
+        }
+
+        map.flyTo(
+            [marker.latitude, marker.longitude],
+            Math.max(map.getZoom(), 16),
+            {
+                duration: 0.45,
+            },
+        );
+        console.log('[Responde LGU] Map focused on station marker', marker.id);
+        // Only re-focus when the selected station changes, not marker color updates.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [focusKey, map]);
 
     return null;
 }
@@ -88,8 +111,16 @@ function LockToBoundary({
 
         const lockedBounds = L.geoJSON(boundary).getBounds().pad(0.15);
         map.setMaxBounds(lockedBounds);
-        map.setMinZoom(map.getBoundsZoom(lockedBounds));
-        console.log('[Responde LGU] Station map locked to LGU bounds');
+        map.setMaxZoom(MAP_MAX_ZOOM);
+        const minZoom = Math.min(
+            map.getBoundsZoom(lockedBounds),
+            MAP_MAX_ZOOM - 2,
+        );
+        map.setMinZoom(minZoom);
+        console.log('[Responde LGU] Station map locked to LGU bounds', {
+            minZoom,
+            maxZoom: MAP_MAX_ZOOM,
+        });
     }, [boundary, map]);
 
     return null;
@@ -107,6 +138,7 @@ export default function StationPointMap({
     center,
     markers,
     selected,
+    focusMarkerId = null,
     onPick,
     onMarkerClick,
     pickEnabled = true,
@@ -118,6 +150,7 @@ export default function StationPointMap({
     center: [number, number];
     markers: StationMarker[];
     selected?: { latitude: number; longitude: number } | null;
+    focusMarkerId?: number | string | null;
     onPick?: (lat: number, lng: number) => void;
     onMarkerClick?: (markerId: number | string) => void;
     pickEnabled?: boolean;
@@ -178,26 +211,41 @@ export default function StationPointMap({
             features: boundary.features.filter(
                 (feature) =>
                     String(
-                        (feature.properties as { psgc?: string } | null)
-                            ?.psgc,
+                        (feature.properties as { psgc?: string } | null)?.psgc,
                     ) === selectedBarangayPsgc,
             ),
         };
     }, [boundary, selectedBarangayPsgc]);
+
+    const focusMarker = useMemo(() => {
+        if (focusMarkerId === null || focusMarkerId === undefined) {
+            return null;
+        }
+
+        return (
+            markers.find(
+                (marker) => String(marker.id) === String(focusMarkerId),
+            ) ?? null
+        );
+    }, [focusMarkerId, markers]);
 
     return (
         <div className="overflow-hidden rounded-xl border border-slate-200">
             <MapContainer
                 center={center}
                 zoom={13}
+                maxZoom={MAP_MAX_ZOOM}
                 className={`z-0 ${className}`}
             >
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                     url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    maxZoom={MAP_MAX_ZOOM}
+                    maxNativeZoom={MAP_MAX_ZOOM}
                 />
                 <LockToBoundary boundary={boundary} />
                 {fitMarkers && <FitMarkers markers={markers} />}
+                <FocusMarker marker={focusMarker} />
                 {outsideMask && (
                     <GeoJSON
                         data={outsideMask}

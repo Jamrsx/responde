@@ -8,6 +8,7 @@ use App\UserRole;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\Validator;
 
 class StoreStationRequest extends FormRequest
@@ -48,6 +49,31 @@ class StoreStationRequest extends FormRequest
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
             'status' => ['required', Rule::in(['active', 'inactive', 'busy'])],
+            'assign_chief' => ['required', 'boolean'],
+            'chief_name' => [
+                Rule::requiredIf($this->boolean('assign_chief')),
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'chief_email' => [
+                Rule::requiredIf($this->boolean('assign_chief')),
+                'nullable',
+                'email',
+                'max:255',
+                'unique:users,email',
+            ],
+            'chief_phone' => [
+                'nullable',
+                'string',
+                'regex:/^09\d{9}$/',
+            ],
+            'chief_password' => [
+                Rule::requiredIf($this->boolean('assign_chief')),
+                'nullable',
+                'confirmed',
+                Password::defaults(),
+            ],
         ];
     }
 
@@ -72,6 +98,8 @@ class StoreStationRequest extends FormRequest
     {
         return [
             'contact_number.regex' => 'Contact number must be an 11-digit mobile number starting with 09.',
+            'chief_phone.regex' => 'Chief phone must be 11 digits and start with 09.',
+            'chief_password.confirmed' => 'Chief password confirmation does not match.',
         ];
     }
 
@@ -84,8 +112,12 @@ class StoreStationRequest extends FormRequest
         }
 
         $contact = preg_replace('/\D+/', '', (string) $this->input('contact_number', ''));
+        $chiefPhone = preg_replace('/\D+/', '', (string) $this->input('chief_phone', ''));
+
         $this->merge([
             'contact_number' => $contact !== '' ? $contact : null,
+            'chief_phone' => $chiefPhone !== '' ? $chiefPhone : null,
+            'assign_chief' => $this->boolean('assign_chief'),
         ]);
     }
 }
