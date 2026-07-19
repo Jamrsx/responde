@@ -171,6 +171,8 @@ Route::middleware('auth')->group(function (): void {
             ->name('chief.dashboard');
         Route::get('/requests', [ChiefResponseRequestController::class, 'index'])
             ->name('chief.requests.index');
+        Route::patch('/requests/{assignment}/status', [ChiefResponseRequestController::class, 'updateStatus'])
+            ->name('chief.requests.status.update');
         Route::get('/station-location', [ChiefStationLocationController::class, 'index'])
             ->name('chief.station-location.index');
         Route::post('/station-location', [ChiefStationLocationController::class, 'store'])

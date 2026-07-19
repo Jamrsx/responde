@@ -3,6 +3,7 @@
 use App\Mail\StaffCredentialsMail;
 use App\Models\Emergency;
 use App\Models\EmergencyAssignment;
+use App\Models\EmergencyStatusHistory;
 use App\Models\Lgu;
 use App\Models\Station;
 use App\Models\StationType;
@@ -133,6 +134,87 @@ test('station score updates from completed assignment public ratings', function 
     expect(StationSatisfactionScore::forStation($station)['score'])->toBe(100)
         ->and(StationSatisfactionScore::forStation($station)['rating_count'])->toBe(1)
         ->and(StationSatisfactionScore::forStation($station)['has_ratings'])->toBeTrue();
+});
+
+test('chief can mark a station request as going to respond and responded', function () {
+    [$lgu, $station] = createChiefPortalStation();
+    $chief = User::factory()->chief($station)->create();
+    $station->update(['chief_user_id' => $chief->id]);
+    $civilian = User::factory()->create(['role' => UserRole::Civilian]);
+    $emergency = Emergency::query()->create([
+        'civilian_user_id' => $civilian->id,
+        'lgu_id' => $lgu->id,
+        'description' => 'Road accident',
+        'latitude' => 8.5,
+        'longitude' => 124.6,
+        'status' => 'assigned',
+    ]);
+    $assignment = EmergencyAssignment::query()->create([
+        'emergency_id' => $emergency->id,
+        'station_id' => $station->id,
+        'status' => 'notified',
+        'notified_at' => now(),
+    ]);
+
+    $this->actingAs($chief)
+        ->patch(route('chief.requests.status.update', $assignment), [
+            'status' => 'en_route',
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect($assignment->fresh()->status)->toBe('en_route')
+        ->and($assignment->fresh()->accepted_at)->not->toBeNull()
+        ->and($emergency->fresh()->status)->toBe('en_route');
+
+    $this->actingAs($chief)
+        ->patch(route('chief.requests.status.update', $assignment), [
+            'status' => 'completed',
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    expect($assignment->fresh()->status)->toBe('completed')
+        ->and($assignment->fresh()->completed_at)->not->toBeNull()
+        ->and($emergency->fresh()->status)->toBe('resolved')
+        ->and($emergency->fresh()->resolved_at)->not->toBeNull()
+        ->and(EmergencyStatusHistory::query()
+            ->where('emergency_id', $emergency->id)
+            ->where('to_status', 'en_route')
+            ->exists())->toBeTrue()
+        ->and(EmergencyStatusHistory::query()
+            ->where('emergency_id', $emergency->id)
+            ->where('to_status', 'resolved')
+            ->exists())->toBeTrue();
+});
+
+test('chief cannot update another stations response request', function () {
+    [$lgu, $station] = createChiefPortalStation();
+    [, $otherStation] = createChiefPortalStation('Foreign LGU');
+    $chief = User::factory()->chief($station)->create();
+    $civilian = User::factory()->create(['role' => UserRole::Civilian]);
+    $emergency = Emergency::query()->create([
+        'civilian_user_id' => $civilian->id,
+        'lgu_id' => $lgu->id,
+        'description' => 'Foreign assignment',
+        'latitude' => 8.5,
+        'longitude' => 124.6,
+        'status' => 'assigned',
+    ]);
+    $assignment = EmergencyAssignment::query()->create([
+        'emergency_id' => $emergency->id,
+        'station_id' => $otherStation->id,
+        'status' => 'notified',
+        'notified_at' => now(),
+    ]);
+
+    $this->actingAs($chief)
+        ->patch(route('chief.requests.status.update', $assignment), [
+            'status' => 'en_route',
+        ])
+        ->assertForbidden();
+
+    expect($assignment->fresh()->status)->toBe('notified');
 });
 
 /**

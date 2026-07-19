@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
 import type { StationIconKey } from '@/components/lgu/stationIcons';
@@ -62,7 +62,7 @@ const statusLabels: Record<string, string> = {
     notified: 'New request',
     accepted: 'Accepted',
     en_route: 'En route',
-    completed: 'Completed',
+    completed: 'Responded',
     declined: 'Declined',
 };
 
@@ -106,6 +106,7 @@ export default function ChiefResponseRequests({
     const [selectedId, setSelectedId] = useState<number | null>(
         requests[0]?.id ?? null,
     );
+    const [updatingId, setUpdatingId] = useState<number | null>(null);
 
     const filteredRequests = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -179,6 +180,43 @@ export default function ChiefResponseRequests({
         console.log('[Responde Chief] Response request selected', id);
     };
 
+    const updateRequestStatus = (
+        request: ResponseRequest,
+        status: 'en_route' | 'completed',
+    ) => {
+        if (
+            status === 'completed' &&
+            !window.confirm(
+                'Mark this request as responded? This will complete the station response.',
+            )
+        ) {
+            return;
+        }
+
+        setUpdatingId(request.id);
+        console.log('[Responde Chief] Updating response request status', {
+            assignmentId: request.id,
+            emergencyId: request.emergency_id,
+            status,
+        });
+        router.patch(
+            `/chief/requests/${request.id}/status`,
+            { status },
+            {
+                preserveScroll: true,
+                onError: (errors) => {
+                    window.alert(
+                        String(
+                            errors.status ??
+                                'The request status could not be updated.',
+                        ),
+                    );
+                },
+                onFinish: () => setUpdatingId(null),
+            },
+        );
+    };
+
     console.log('[Responde Chief] Response requests loaded', {
         stationId: station.id,
         count: requests.length,
@@ -237,7 +275,7 @@ export default function ChiefResponseRequests({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search by type, address, barangay, reporter, or request number..."
-                className="mb-5 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15"
+                className="mb-5 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 transition outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
 
             {filteredRequests.length === 0 ? (
@@ -396,17 +434,60 @@ export default function ChiefResponseRequests({
                                     />
                                 </dl>
 
-                                {selected.latitude &&
-                                    selected.longitude && (
-                                        <a
-                                            href={`https://www.openstreetmap.org/?mlat=${selected.latitude}&mlon=${selected.longitude}#map=18/${selected.latitude}/${selected.longitude}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                                        >
-                                            Open location in map
-                                        </a>
-                                    )}
+                                {['notified', 'accepted'].includes(
+                                    selected.status,
+                                ) && (
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            updateRequestStatus(
+                                                selected,
+                                                'en_route',
+                                            )
+                                        }
+                                        disabled={updatingId === selected.id}
+                                        className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        {updatingId === selected.id
+                                            ? 'Updating...'
+                                            : 'Going to respond'}
+                                    </button>
+                                )}
+
+                                {selected.status === 'en_route' && (
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            updateRequestStatus(
+                                                selected,
+                                                'completed',
+                                            )
+                                        }
+                                        disabled={updatingId === selected.id}
+                                        className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        {updatingId === selected.id
+                                            ? 'Updating...'
+                                            : 'Mark as responded'}
+                                    </button>
+                                )}
+
+                                {selected.status === 'completed' && (
+                                    <p className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700">
+                                        Response completed
+                                    </p>
+                                )}
+
+                                {selected.latitude && selected.longitude && (
+                                    <a
+                                        href={`https://www.openstreetmap.org/?mlat=${selected.latitude}&mlon=${selected.longitude}#map=18/${selected.latitude}/${selected.longitude}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                    >
+                                        Open location in map
+                                    </a>
+                                )}
                             </>
                         )}
                     </aside>

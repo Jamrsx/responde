@@ -3,10 +3,18 @@
 namespace App\Http\Controllers\Chief;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Chief\UpdateResponseStatusRequest;
+use App\Models\AuditLog;
+use App\Models\Emergency;
 use App\Models\EmergencyAssignment;
+use App\Models\EmergencyStatusHistory;
 use App\Models\Lgu;
 use App\Models\Station;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -87,5 +95,118 @@ class ResponseRequestController extends Controller
                 ? route('map-data.barangays.show', ['psgc' => $lgu->psgc_code], absolute: false)
                 : null,
         ]);
+    }
+
+    public function updateStatus(
+        UpdateResponseStatusRequest $request,
+        EmergencyAssignment $assignment,
+    ): RedirectResponse {
+        /** @var Station $station */
+        $station = $request->attributes->get('current_station');
+        $targetStatus = (string) $request->validated('status');
+
+        if ($assignment->station_id !== $station->id) {
+            abort(403);
+        }
+
+        $allowedFrom = $targetStatus === 'en_route'
+            ? ['notified', 'accepted']
+            : ['en_route'];
+
+        if (! in_array($assignment->status, $allowedFrom, true)) {
+            throw ValidationException::withMessages([
+                'status' => $targetStatus === 'en_route'
+                    ? 'Only a new request can be marked as going to respond.'
+                    : 'Mark the request as going to respond before completing it.',
+            ]);
+        }
+
+        $oldAssignmentStatus = $assignment->status;
+
+        DB::transaction(function () use (
+            $allowedFrom,
+            $assignment,
+            $request,
+            $targetStatus,
+        ): void {
+            /** @var EmergencyAssignment $lockedAssignment */
+            $lockedAssignment = EmergencyAssignment::query()
+                ->lockForUpdate()
+                ->findOrFail($assignment->id);
+
+            if (! in_array($lockedAssignment->status, $allowedFrom, true)) {
+                throw ValidationException::withMessages([
+                    'status' => 'This request status changed. Refresh and try again.',
+                ]);
+            }
+
+            /** @var Emergency $emergency */
+            $emergency = Emergency::query()
+                ->lockForUpdate()
+                ->findOrFail($lockedAssignment->emergency_id);
+            $oldEmergencyStatus = $emergency->status;
+
+            if ($targetStatus === 'en_route') {
+                $lockedAssignment->status = 'en_route';
+                $lockedAssignment->accepted_at ??= now();
+
+                if (! in_array($emergency->status, ['resolved', 'cancelled'], true)) {
+                    $emergency->status = 'en_route';
+                }
+            } else {
+                $lockedAssignment->status = 'completed';
+                $lockedAssignment->completed_at = now();
+
+                $hasOtherActiveAssignments = EmergencyAssignment::query()
+                    ->where('emergency_id', $emergency->id)
+                    ->where('id', '!=', $lockedAssignment->id)
+                    ->whereNotIn('status', ['completed', 'declined'])
+                    ->exists();
+
+                if (! $hasOtherActiveAssignments) {
+                    $emergency->status = 'resolved';
+                    $emergency->resolved_at = now();
+                }
+            }
+
+            $lockedAssignment->save();
+            $emergency->save();
+
+            if ($oldEmergencyStatus !== $emergency->status) {
+                EmergencyStatusHistory::query()->create([
+                    'emergency_id' => $emergency->id,
+                    'changed_by_user_id' => $request->user()?->id,
+                    'from_status' => $oldEmergencyStatus,
+                    'to_status' => $emergency->status,
+                    'notes' => $targetStatus === 'en_route'
+                        ? 'Station chief marked the assignment as going to respond.'
+                        : 'Station chief marked the assignment as responded.',
+                ]);
+            }
+        });
+
+        AuditLog::query()->create([
+            'user_id' => $request->user()?->id,
+            'action' => 'emergency_assignment.status_updated_by_chief',
+            'auditable_type' => EmergencyAssignment::class,
+            'auditable_id' => $assignment->id,
+            'old_values' => ['status' => $oldAssignmentStatus],
+            'new_values' => ['status' => $targetStatus],
+        ]);
+
+        Log::info('[Responde Chief] Response request status updated', [
+            'assignment_id' => $assignment->id,
+            'station_id' => $station->id,
+            'chief_user_id' => $request->user()?->id,
+            'from_status' => $oldAssignmentStatus,
+            'to_status' => $targetStatus,
+        ]);
+
+        return back()->with(
+            'success',
+            $targetStatus === 'en_route'
+                ? 'The station is now going to respond.'
+                : 'The response was marked as completed.',
+        );
     }
 }
