@@ -115,8 +115,8 @@ function managedAccountPayload(array $overrides = []): array
         'name' => 'Managed User',
         'email' => 'managed@example.com',
         'phone' => '09171234567',
+        'set_password' => true,
         'password' => 'SecurePassword123!',
-        'password_confirmation' => 'SecurePassword123!',
     ], $overrides);
 }
 

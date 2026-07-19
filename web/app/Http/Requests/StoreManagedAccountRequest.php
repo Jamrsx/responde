@@ -9,7 +9,6 @@ use App\UserRole;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 
 class StoreManagedAccountRequest extends FormRequest
 {
@@ -33,7 +32,14 @@ class StoreManagedAccountRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique(User::class)],
-            'password' => ['required', 'confirmed', Password::defaults()],
+            'set_password' => ['required', 'boolean'],
+            'password' => [
+                Rule::requiredIf($this->boolean('set_password')),
+                'nullable',
+                'string',
+                'min:8',
+                'max:72',
+            ],
             'phone' => ['nullable', 'string', 'regex:/^09\d{9}$/'],
             'lgu_id' => [
                 Rule::requiredIf(fn (): bool => $actor?->role === UserRole::SuperAdmin),
@@ -62,17 +68,31 @@ class StoreManagedAccountRequest extends FormRequest
             'station_id.required' => 'Select the response station this chief will manage.',
             'station_id.exists' => 'The selected station does not belong to your LGU.',
             'phone.regex' => 'Phone must be 11 digits and start with 09.',
+            'password.required' => 'Enter a password to email, or uncheck Set password manually.',
+            'password.min' => 'Password must be at least 8 characters.',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $setPassword = $this->boolean('set_password');
+
+        $this->merge([
+            'email' => strtolower(trim((string) $this->input('email'))),
+            'set_password' => $setPassword,
+            'password' => $setPassword ? (string) $this->input('password') : null,
+        ]);
     }
 
     /**
      * @return array{
      *     name: string,
      *     email: string,
-     *     password: string,
+     *     password: string|null,
      *     phone: string|null,
      *     lgu_id: int|null,
-     *     station_id: int|null
+     *     station_id: int|null,
+     *     set_password: bool
      * }
      */
     public function accountData(): array
@@ -80,10 +100,11 @@ class StoreManagedAccountRequest extends FormRequest
         return [
             'name' => $this->string('name')->toString(),
             'email' => $this->string('email')->toString(),
-            'password' => $this->string('password')->toString(),
+            'password' => $this->filled('password') ? $this->string('password')->toString() : null,
             'phone' => $this->filled('phone') ? $this->string('phone')->toString() : null,
             'lgu_id' => $this->filled('lgu_id') ? $this->integer('lgu_id') : null,
             'station_id' => $this->filled('station_id') ? $this->integer('station_id') : null,
+            'set_password' => $this->boolean('set_password'),
         ];
     }
 }

@@ -66,6 +66,7 @@ export default function CaptainDashboard({
         name: outpost.name,
         latitude: Number(outpost.latitude),
         longitude: Number(outpost.longitude),
+        iconKey: 'security' as const,
         color:
             outpost.approval_status === 'approved'
                 ? '#047857'
@@ -236,8 +237,7 @@ export default function CaptainDashboard({
                                                     router.delete(
                                                         `/captain/outposts/${outpost.id}`,
                                                         {
-                                                            preserveScroll:
-                                                                true,
+                                                            preserveScroll: true,
                                                         },
                                                     );
                                                 }}

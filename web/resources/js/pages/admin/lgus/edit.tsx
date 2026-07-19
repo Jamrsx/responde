@@ -35,6 +35,11 @@ export default function EditLgu({ lgu }: { lgu: EditableLgu }) {
         longitude: lgu.longitude ? Number(lgu.longitude) : '',
         area_km2: lgu.area_km2 ? Number(lgu.area_km2) : '',
         is_active: lgu.is_active,
+        admin_name: '',
+        admin_email: '',
+        admin_phone: '',
+        set_admin_password: false,
+        admin_password: '',
     };
 
     return (

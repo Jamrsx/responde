@@ -1,4 +1,5 @@
 import { Link, useForm } from '@inertiajs/react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 
 import FormField, { inputClassName } from '@/components/admin/FormField';
@@ -18,6 +19,11 @@ export type LguFormValues = {
     longitude: number | '';
     area_km2: number | '';
     is_active: boolean;
+    admin_name: string;
+    admin_email: string;
+    admin_phone: string;
+    set_admin_password: boolean;
+    admin_password: string;
 };
 
 export const emptyLguForm: LguFormValues = {
@@ -33,6 +39,11 @@ export const emptyLguForm: LguFormValues = {
     longitude: '',
     area_km2: '',
     is_active: true,
+    admin_name: '',
+    admin_email: '',
+    admin_phone: '',
+    set_admin_password: false,
+    admin_password: '',
 };
 
 const lockedInputClassName = `${inputClassName} cursor-default bg-slate-50 text-slate-600 focus:border-slate-300 focus:ring-0`;
@@ -48,6 +59,7 @@ export default function LguForm({
 }) {
     const form = useForm<LguFormValues>(initial);
     const isEdit = mode === 'edit';
+    const [showAdminPassword, setShowAdminPassword] = useState(false);
 
     const applyMapSelection = (selection: LguSelection) => {
         if (isEdit) {
@@ -270,6 +282,192 @@ export default function LguForm({
                             />
                         </FormField>
 
+                        {!isEdit && (
+                            <section className="rounded-xl border border-brand/20 bg-brand-light/40 p-4 md:col-span-2 xl:col-span-1">
+                                <div className="mb-4">
+                                    <h3 className="text-sm font-bold text-slate-900">
+                                        LGU administrator
+                                    </h3>
+                                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                                        Login credentials will be emailed to
+                                        this administrator. You can set a
+                                        password manually or let the system
+                                        generate one.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <FormField
+                                        label="Administrator full name"
+                                        htmlFor="lgu-admin-name"
+                                        error={form.errors.admin_name}
+                                    >
+                                        <input
+                                            id="lgu-admin-name"
+                                            type="text"
+                                            value={form.data.admin_name}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'admin_name',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            required
+                                            autoComplete="name"
+                                            placeholder="e.g. Juan Dela Cruz"
+                                            className={inputClassName}
+                                        />
+                                    </FormField>
+
+                                    <FormField
+                                        label="Administrator email"
+                                        htmlFor="lgu-admin-email"
+                                        error={form.errors.admin_email}
+                                    >
+                                        <input
+                                            id="lgu-admin-email"
+                                            type="email"
+                                            value={form.data.admin_email}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'admin_email',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            required
+                                            autoComplete="email"
+                                            placeholder="admin@example.com"
+                                            className={inputClassName}
+                                        />
+                                    </FormField>
+
+                                    <FormField
+                                        label="Administrator phone (optional)"
+                                        htmlFor="lgu-admin-phone"
+                                        error={form.errors.admin_phone}
+                                    >
+                                        <input
+                                            id="lgu-admin-phone"
+                                            type="tel"
+                                            inputMode="numeric"
+                                            value={form.data.admin_phone}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'admin_phone',
+                                                    event.target.value
+                                                        .replace(/\D/g, '')
+                                                        .slice(0, 11),
+                                                )
+                                            }
+                                            maxLength={11}
+                                            pattern="09[0-9]{9}"
+                                            title="Must be 11 digits starting with 09"
+                                            autoComplete="tel"
+                                            placeholder="09XXXXXXXXX"
+                                            className={inputClassName}
+                                        />
+                                        <p className="mt-1.5 text-xs text-slate-400">
+                                            11 digits starting with 09
+                                        </p>
+                                    </FormField>
+
+                                    <label
+                                        htmlFor="lgu-set-admin-password"
+                                        className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-200 bg-white px-3 py-3"
+                                    >
+                                        <span>
+                                            <span className="block text-sm font-semibold text-slate-900">
+                                                Set password manually
+                                            </span>
+                                            <span className="mt-1 block text-xs leading-5 text-slate-500">
+                                                If unchecked, the system
+                                                generates an 8-character
+                                                password and emails it.
+                                            </span>
+                                        </span>
+                                        <input
+                                            id="lgu-set-admin-password"
+                                            type="checkbox"
+                                            checked={
+                                                form.data.set_admin_password
+                                            }
+                                            onChange={(event) => {
+                                                form.setData((data) => ({
+                                                    ...data,
+                                                    set_admin_password:
+                                                        event.target.checked,
+                                                    admin_password: event.target
+                                                        .checked
+                                                        ? data.admin_password
+                                                        : '',
+                                                }));
+                                                form.clearErrors(
+                                                    'admin_password',
+                                                );
+                                                console.log(
+                                                    '[Responde Admin] Set LGU admin password manually',
+                                                    event.target.checked,
+                                                );
+                                            }}
+                                            className="mt-0.5 h-5 w-5 rounded border-slate-300 text-brand focus:ring-brand"
+                                        />
+                                    </label>
+
+                                    {form.data.set_admin_password ? (
+                                        <FormField
+                                            label="Password to email"
+                                            htmlFor="lgu-admin-password"
+                                            error={form.errors.admin_password}
+                                        >
+                                            <div className="flex gap-2">
+                                                <input
+                                                    id="lgu-admin-password"
+                                                    type={
+                                                        showAdminPassword
+                                                            ? 'text'
+                                                            : 'password'
+                                                    }
+                                                    value={
+                                                        form.data.admin_password
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'admin_password',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                    required
+                                                    autoComplete="new-password"
+                                                    minLength={8}
+                                                    placeholder="At least 8 characters"
+                                                    className={inputClassName}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setShowAdminPassword(
+                                                            (value) => !value,
+                                                        )
+                                                    }
+                                                    className="min-h-11 shrink-0 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                                                >
+                                                    {showAdminPassword
+                                                        ? 'Hide'
+                                                        : 'Show'}
+                                                </button>
+                                            </div>
+                                        </FormField>
+                                    ) : (
+                                        <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
+                                            The system will generate an
+                                            8-character temporary password and
+                                            email the login credentials.
+                                        </p>
+                                    )}
+                                </div>
+                            </section>
+                        )}
+
                         {isEdit && (
                             <label className="flex min-h-11 cursor-pointer items-center gap-3 self-end text-sm text-slate-700 md:col-span-2 xl:col-span-1">
                                 <input
@@ -301,10 +499,12 @@ export default function LguForm({
                             className="flex min-h-11 items-center justify-center rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {form.processing
-                                ? 'Saving...'
+                                ? isEdit
+                                    ? 'Saving...'
+                                    : 'Creating and sending email...'
                                 : isEdit
                                   ? 'Save changes'
-                                  : 'Add LGU'}
+                                  : 'Add LGU and administrator'}
                         </button>
                     </div>
                 </section>

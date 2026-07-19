@@ -48,14 +48,15 @@ export default function LguBarangaysIndex({ lgu, barangays, mapUrl }: Props) {
     const [replaceCaptainBarangay, setReplaceCaptainBarangay] =
         useState<Barangay | null>(null);
     const [importing, setImporting] = useState(false);
+    const [showCaptainPassword, setShowCaptainPassword] = useState(false);
 
     const captainForm = useForm({
         barangay_id: 0,
         name: '',
         email: '',
         phone: '',
+        set_password: false,
         password: '',
-        password_confirmation: '',
     });
 
     const editCaptainForm = useForm({
@@ -135,15 +136,19 @@ export default function LguBarangaysIndex({ lgu, barangays, mapUrl }: Props) {
             name: '',
             email: '',
             phone: '',
+            set_password: false,
             password: '',
-            password_confirmation: '',
         });
+        setShowCaptainPassword(false);
         captainForm.clearErrors();
     };
 
     const submitCaptain = (event: FormEvent) => {
         event.preventDefault();
-        console.log('[Responde LGU] Creating barangay captain', captainForm.data);
+        console.log(
+            '[Responde LGU] Creating barangay captain',
+            captainForm.data,
+        );
         captainForm.post('/lgu/barangays/captains', {
             preserveScroll: true,
             onSuccess: () => setCaptainBarangay(null),
@@ -259,10 +264,7 @@ export default function LguBarangaysIndex({ lgu, barangays, mapUrl }: Props) {
                         selectedPsgcs={selectedPsgcs}
                         center={
                             lgu.latitude && lgu.longitude
-                                ? [
-                                      Number(lgu.latitude),
-                                      Number(lgu.longitude),
-                                  ]
+                                ? [Number(lgu.latitude), Number(lgu.longitude)]
                                 : null
                         }
                         onLoaded={(total) => {
@@ -424,7 +426,7 @@ export default function LguBarangaysIndex({ lgu, barangays, mapUrl }: Props) {
                             <span className="font-semibold text-slate-900">
                                 {captainBarangay.name}
                             </span>
-                            .
+                            . Login credentials will be emailed to the captain.
                         </p>
                         <FormField
                             label="Full name"
@@ -464,7 +466,7 @@ export default function LguBarangaysIndex({ lgu, barangays, mapUrl }: Props) {
                             />
                         </FormField>
                         <FormField
-                            label="Phone"
+                            label="Phone number"
                             htmlFor="captain-phone"
                             error={captainForm.errors.phone}
                         >
@@ -478,54 +480,95 @@ export default function LguBarangaysIndex({ lgu, barangays, mapUrl }: Props) {
                                         event.target.value.replace(/\D/g, ''),
                                     )
                                 }
+                                inputMode="numeric"
                                 maxLength={11}
+                                pattern="09[0-9]{9}"
+                                title="Must be 11 digits starting with 09"
                                 placeholder="09XXXXXXXXX"
+                                required
                             />
                         </FormField>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <label
+                            htmlFor="captain-set-password"
+                            className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
+                        >
+                            <span>
+                                <span className="block text-sm font-semibold text-slate-900">
+                                    Set password manually
+                                </span>
+                                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                                    If unchecked, the system generates an
+                                    8-character password and emails it.
+                                </span>
+                            </span>
+                            <input
+                                id="captain-set-password"
+                                type="checkbox"
+                                checked={captainForm.data.set_password}
+                                onChange={(event) => {
+                                    captainForm.setData((data) => ({
+                                        ...data,
+                                        set_password: event.target.checked,
+                                        password: event.target.checked
+                                            ? data.password
+                                            : '',
+                                    }));
+                                    captainForm.clearErrors('password');
+                                    console.log(
+                                        '[Responde LGU] Set captain password manually',
+                                        event.target.checked,
+                                    );
+                                }}
+                                className="mt-0.5 h-5 w-5 rounded border-slate-300 text-brand focus:ring-brand"
+                            />
+                        </label>
+                        {captainForm.data.set_password ? (
                             <FormField
-                                label="Password"
+                                label="Password to email"
                                 htmlFor="captain-password"
                                 error={captainForm.errors.password}
                             >
-                                <input
-                                    id="captain-password"
-                                    type="password"
-                                    className={inputClassName}
-                                    value={captainForm.data.password}
-                                    onChange={(event) =>
-                                        captainForm.setData(
-                                            'password',
-                                            event.target.value,
-                                        )
-                                    }
-                                    required
-                                />
+                                <div className="flex gap-2">
+                                    <input
+                                        id="captain-password"
+                                        type={
+                                            showCaptainPassword
+                                                ? 'text'
+                                                : 'password'
+                                        }
+                                        className={inputClassName}
+                                        value={captainForm.data.password}
+                                        onChange={(event) =>
+                                            captainForm.setData(
+                                                'password',
+                                                event.target.value,
+                                            )
+                                        }
+                                        autoComplete="new-password"
+                                        minLength={8}
+                                        placeholder="At least 8 characters"
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setShowCaptainPassword(
+                                                (value) => !value,
+                                            )
+                                        }
+                                        className="min-h-11 shrink-0 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                                    >
+                                        {showCaptainPassword ? 'Hide' : 'Show'}
+                                    </button>
+                                </div>
                             </FormField>
-                            <FormField
-                                label="Confirm password"
-                                htmlFor="captain-password-confirm"
-                                error={
-                                    captainForm.errors.password_confirmation
-                                }
-                            >
-                                <input
-                                    id="captain-password-confirm"
-                                    type="password"
-                                    className={inputClassName}
-                                    value={
-                                        captainForm.data.password_confirmation
-                                    }
-                                    onChange={(event) =>
-                                        captainForm.setData(
-                                            'password_confirmation',
-                                            event.target.value,
-                                        )
-                                    }
-                                    required
-                                />
-                            </FormField>
-                        </div>
+                        ) : (
+                            <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
+                                The system will generate an 8-character
+                                temporary password and send it to the email
+                                above.
+                            </p>
+                        )}
                         <div className="flex justify-end gap-3">
                             <button
                                 type="button"
@@ -540,8 +583,8 @@ export default function LguBarangaysIndex({ lgu, barangays, mapUrl }: Props) {
                                 className="min-h-11 rounded-lg bg-brand px-5 text-sm font-semibold text-white disabled:opacity-60"
                             >
                                 {captainForm.processing
-                                    ? 'Creating...'
-                                    : 'Create account'}
+                                    ? 'Creating and sending email...'
+                                    : 'Create and email account'}
                             </button>
                         </div>
                     </form>
@@ -763,9 +806,7 @@ export default function LguBarangaysIndex({ lgu, barangays, mapUrl }: Props) {
                         <div className="flex justify-end gap-3">
                             <button
                                 type="button"
-                                onClick={() =>
-                                    setReplaceCaptainBarangay(null)
-                                }
+                                onClick={() => setReplaceCaptainBarangay(null)}
                                 className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600"
                             >
                                 Cancel

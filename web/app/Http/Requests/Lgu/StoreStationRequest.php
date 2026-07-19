@@ -4,11 +4,11 @@ namespace App\Http\Requests\Lgu;
 
 use App\Models\Barangay;
 use App\Models\StationType;
+use App\Models\User;
 use App\UserRole;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\Validator;
 
 class StoreStationRequest extends FormRequest
@@ -34,6 +34,19 @@ class StoreStationRequest extends FormRequest
                         ->where('is_active', true)
                         ->where('code', '!=', 'tanod'),
                 ),
+            ],
+            'icon_key' => [
+                'required',
+                Rule::in([
+                    'police',
+                    'fire',
+                    'disaster',
+                    'medical',
+                    'security',
+                    'rescue',
+                    'government',
+                    'generic',
+                ]),
             ],
             'other_type_name' => ['nullable', 'string', 'max:255'],
             'barangay_id' => [
@@ -61,18 +74,18 @@ class StoreStationRequest extends FormRequest
                 'nullable',
                 'email',
                 'max:255',
-                'unique:users,email',
+                Rule::unique(User::class, 'email'),
             ],
-            'chief_phone' => [
+            'set_chief_password' => ['required', 'boolean'],
+            'chief_password' => [
+                Rule::requiredIf(
+                    fn (): bool => $this->boolean('assign_chief')
+                        && $this->boolean('set_chief_password'),
+                ),
                 'nullable',
                 'string',
-                'regex:/^09\d{9}$/',
-            ],
-            'chief_password' => [
-                Rule::requiredIf($this->boolean('assign_chief')),
-                'nullable',
-                'confirmed',
-                Password::defaults(),
+                'min:8',
+                'max:72',
             ],
         ];
     }
@@ -98,8 +111,11 @@ class StoreStationRequest extends FormRequest
     {
         return [
             'contact_number.regex' => 'Contact number must be an 11-digit mobile number starting with 09.',
-            'chief_phone.regex' => 'Chief phone must be 11 digits and start with 09.',
-            'chief_password.confirmed' => 'Chief password confirmation does not match.',
+            'chief_name.required' => 'Enter the station chief full name.',
+            'chief_email.required' => 'Enter the station chief email address.',
+            'chief_email.unique' => 'An account already uses this email address.',
+            'chief_password.required' => 'Enter a password to email, or uncheck Set password manually.',
+            'chief_password.min' => 'Chief password must be at least 8 characters.',
         ];
     }
 
@@ -112,12 +128,17 @@ class StoreStationRequest extends FormRequest
         }
 
         $contact = preg_replace('/\D+/', '', (string) $this->input('contact_number', ''));
-        $chiefPhone = preg_replace('/\D+/', '', (string) $this->input('chief_phone', ''));
+        $assignChief = $this->boolean('assign_chief');
+        $setChiefPassword = $assignChief && $this->boolean('set_chief_password');
 
         $this->merge([
             'contact_number' => $contact !== '' ? $contact : null,
-            'chief_phone' => $chiefPhone !== '' ? $chiefPhone : null,
-            'assign_chief' => $this->boolean('assign_chief'),
+            'chief_email' => strtolower(trim((string) $this->input('chief_email'))),
+            'assign_chief' => $assignChief,
+            'set_chief_password' => $setChiefPassword,
+            'chief_password' => $setChiefPassword
+                ? (string) $this->input('chief_password')
+                : null,
         ]);
     }
 }

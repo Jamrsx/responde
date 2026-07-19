@@ -7,17 +7,22 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Lgu\Concerns\ResolvesCurrentLgu;
 use App\Http\Requests\Lgu\StoreStationRequest;
 use App\Http\Requests\Lgu\UpdateStationRequest;
+use App\Mail\StationChiefCredentialsMail;
 use App\Models\AuditLog;
 use App\Models\Barangay;
 use App\Models\Station;
 use App\Models\StationType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class StationController extends Controller
 {
@@ -47,11 +52,7 @@ class StationController extends Controller
                 'longitude' => $lgu->longitude,
             ],
             'stations' => $stations,
-            'stationTypes' => StationType::query()
-                ->where('is_active', true)
-                ->where('code', '!=', 'tanod')
-                ->orderBy('name')
-                ->get(['id', 'name', 'code']),
+            'stationTypes' => $this->activeStationTypes(),
             'barangays' => Barangay::query()
                 ->where('lgu_id', $lgu->id)
                 ->where('is_active', true)
@@ -66,6 +67,23 @@ class StationController extends Controller
     public function create(Request $request): Response
     {
         $lgu = $this->currentLgu($request);
+        $existingStations = Station::query()
+            ->with('stationType:id,name,code')
+            ->where('lgu_id', $lgu->id)
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Station $station): array => [
+                'id' => $station->id,
+                'name' => $station->name,
+                'latitude' => $station->latitude,
+                'longitude' => $station->longitude,
+                'approval_status' => $station->approval_status,
+                'icon_key' => $this->resolveIconKey($station),
+                'type' => $station->stationType?->name,
+                'type_code' => $station->stationType?->code,
+            ]);
 
         Log::info('LGU station create page opened.', [
             'lgu_id' => $lgu->id,
@@ -80,16 +98,13 @@ class StationController extends Controller
                 'latitude' => $lgu->latitude,
                 'longitude' => $lgu->longitude,
             ],
-            'stationTypes' => StationType::query()
-                ->where('is_active', true)
-                ->where('code', '!=', 'tanod')
-                ->orderBy('name')
-                ->get(['id', 'name', 'code']),
+            'stationTypes' => $this->activeStationTypes(),
             'barangays' => Barangay::query()
                 ->where('lgu_id', $lgu->id)
                 ->where('is_active', true)
                 ->orderBy('name')
                 ->get(['id', 'name', 'code']),
+            'existingStations' => $existingStations,
             'mapUrl' => $lgu->psgc_code
                 ? route('map-data.barangays.show', ['psgc' => $lgu->psgc_code], absolute: false)
                 : null,
@@ -101,68 +116,116 @@ class StationController extends Controller
         CreateStationChiefAccount $createStationChiefAccount,
     ): RedirectResponse {
         $lgu = $this->currentLgu($request);
+        $actor = $request->user();
+        abort_if($actor === null, 403);
+
         $this->assertBarangayBelongsToLgu($request->integer('barangay_id') ?: null, $lgu->id);
         $validated = $request->validated();
 
-        $station = DB::transaction(function () use (
-            $request,
-            $lgu,
-            $validated,
-            $createStationChiefAccount,
-        ): Station {
-            $station = Station::query()->create([
-                'station_type_id' => $validated['station_type_id'],
-                'other_type_name' => $validated['other_type_name'] ?? null,
-                'barangay_id' => $validated['barangay_id'] ?? null,
-                'name' => $validated['name'],
-                'contact_number' => $validated['contact_number'] ?? null,
-                'address' => $validated['address'] ?? null,
-                'latitude' => $validated['latitude'],
-                'longitude' => $validated['longitude'],
-                'status' => $validated['status'],
-                'lgu_id' => $lgu->id,
-                'approval_status' => 'approved',
-                'submitted_by_user_id' => $request->user()?->id,
-            ]);
-
-            AuditLog::query()->create([
-                'user_id' => $request->user()?->id,
-                'action' => 'station.created',
-                'auditable_type' => Station::class,
-                'auditable_id' => $station->id,
-                'new_values' => $station->only([
-                    'name',
-                    'station_type_id',
-                    'other_type_name',
-                    'barangay_id',
-                    'latitude',
-                    'longitude',
-                    'status',
-                    'approval_status',
-                ]),
-            ]);
-
-            if ($validated['assign_chief']) {
-                $station->load('stationType:id,code');
-                $createStationChiefAccount->execute($request->user(), $station, [
-                    'name' => $validated['chief_name'],
-                    'email' => $validated['chief_email'],
-                    'password' => $validated['chief_password'],
-                    'phone' => $validated['chief_phone'] ?? null,
+        try {
+            $station = DB::transaction(function () use (
+                $actor,
+                $lgu,
+                $validated,
+                $createStationChiefAccount,
+            ): Station {
+                $station = Station::query()->create([
+                    'station_type_id' => $validated['station_type_id'],
+                    'icon_key' => $validated['icon_key'],
+                    'other_type_name' => $validated['other_type_name'] ?? null,
+                    'barangay_id' => $validated['barangay_id'] ?? null,
+                    'name' => $validated['name'],
+                    'contact_number' => $validated['contact_number'] ?? null,
+                    'address' => $validated['address'] ?? null,
+                    'latitude' => $validated['latitude'],
+                    'longitude' => $validated['longitude'],
+                    'status' => $validated['status'],
+                    'lgu_id' => $lgu->id,
+                    'approval_status' => 'approved',
+                    'submitted_by_user_id' => $actor->id,
                 ]);
-            }
 
-            return $station;
-        });
+                AuditLog::query()->create([
+                    'user_id' => $actor->id,
+                    'action' => 'station.created',
+                    'auditable_type' => Station::class,
+                    'auditable_id' => $station->id,
+                    'new_values' => $station->only([
+                        'name',
+                        'station_type_id',
+                        'icon_key',
+                        'other_type_name',
+                        'barangay_id',
+                        'latitude',
+                        'longitude',
+                        'status',
+                        'approval_status',
+                    ]),
+                ]);
+
+                if ($validated['assign_chief']) {
+                    $temporaryPassword = filled($validated['chief_password'] ?? null)
+                        ? (string) $validated['chief_password']
+                        : Str::password(
+                            length: 8,
+                            letters: true,
+                            numbers: true,
+                            symbols: false,
+                            spaces: false,
+                        );
+                    $station->load('stationType:id,code');
+
+                    $chief = $createStationChiefAccount->execute(
+                        $actor,
+                        $station,
+                        [
+                            'name' => $validated['chief_name'],
+                            'email' => $validated['chief_email'],
+                            'password' => $temporaryPassword,
+                            'phone' => null,
+                        ],
+                    );
+
+                    Mail::to($chief->email)->send(
+                        new StationChiefCredentialsMail(
+                            chiefName: $chief->name,
+                            stationName: $station->name,
+                            lguName: $lgu->name,
+                            emailAddress: $chief->email,
+                            temporaryPassword: $temporaryPassword,
+                            loginUrl: route('login', absolute: true),
+                        ),
+                    );
+                }
+
+                return $station;
+            });
+        } catch (Throwable $exception) {
+            report($exception);
+            Log::error('Station and chief creation failed.', [
+                'actor_user_id' => $actor->id,
+                'lgu_id' => $lgu->id,
+                'station_name' => $validated['name'],
+                'chief_email' => $validated['chief_email'] ?? null,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'The station was not created because the chief account email could not be sent. Check the email address and mail settings, then try again.',
+                );
+        }
 
         Log::info('LGU station created.', [
             'station_id' => $station->id,
             'lgu_id' => $lgu->id,
-            'actor_user_id' => $request->user()?->id,
+            'actor_user_id' => $actor->id,
         ]);
 
         $message = $validated['assign_chief']
-            ? "{$station->name} and its chief account were added successfully."
+            ? "{$station->name} and its chief account were added. Login credentials were emailed to {$validated['chief_email']}."
             : "{$station->name} was added successfully.";
 
         return redirect()
@@ -188,6 +251,7 @@ class StationController extends Controller
         $old = $station->only([
             'name',
             'station_type_id',
+            'icon_key',
             'other_type_name',
             'barangay_id',
             'latitude',
@@ -295,6 +359,7 @@ class StationController extends Controller
             'approval_status' => $station->approval_status,
             'station_type_id' => $station->station_type_id,
             'barangay_id' => $station->barangay_id,
+            'icon_key' => $this->resolveIconKey($station),
             'other_type_name' => $station->other_type_name,
             'type' => $typeLabel,
             'type_code' => $station->stationType?->code,
@@ -307,6 +372,54 @@ class StationController extends Controller
                 ]
                 : null,
         ];
+    }
+
+    /**
+     * @return Collection<int, StationType>
+     */
+    private function activeStationTypes()
+    {
+        return StationType::query()
+            ->where('is_active', true)
+            ->where('code', '!=', 'tanod')
+            ->orderByRaw("CASE WHEN code = 'other' THEN 1 ELSE 0 END")
+            ->orderBy('name')
+            ->get(['id', 'name', 'code']);
+    }
+
+    private function resolveIconKey(Station $station): string
+    {
+        $allowed = [
+            'police',
+            'fire',
+            'disaster',
+            'medical',
+            'security',
+            'rescue',
+            'government',
+            'generic',
+        ];
+
+        $stored = (string) ($station->icon_key ?? '');
+
+        if ($stored !== '' && $stored !== 'generic' && in_array($stored, $allowed, true)) {
+            return $stored;
+        }
+
+        $fromType = match ($station->stationType?->code) {
+            'pnp' => 'police',
+            'bfp' => 'fire',
+            'drrmo' => 'disaster',
+            'health' => 'medical',
+            'tanod' => 'security',
+            default => null,
+        };
+
+        if ($fromType !== null) {
+            return $fromType;
+        }
+
+        return in_array($stored, $allowed, true) ? $stored : 'generic';
     }
 
     private function assertOwnedStation(Station $station, int $lguId): void

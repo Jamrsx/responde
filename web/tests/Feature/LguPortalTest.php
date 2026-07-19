@@ -59,12 +59,12 @@ test('lgu admin can create a station and its chief together', function () {
             'latitude' => 8.5214,
             'longitude' => 124.5711,
             'status' => 'active',
+            'icon_key' => 'police',
             'assign_chief' => true,
             'chief_name' => 'Chief Test',
             'chief_email' => 'chief.station@example.com',
-            'chief_phone' => '09181234567',
+            'set_chief_password' => true,
             'chief_password' => 'password123',
-            'chief_password_confirmation' => 'password123',
         ])
         ->assertRedirect(route('lgu.stations.index'))
         ->assertSessionHas('success');
@@ -101,14 +101,15 @@ test('chief details are required when creating a station with a chief', function
             'name' => 'Opol Health Center',
             'latitude' => 8.5214,
             'longitude' => 124.5711,
+            'icon_key' => 'medical',
             'status' => 'active',
             'assign_chief' => true,
+            'set_chief_password' => false,
         ])
         ->assertRedirect(route('lgu.stations.create'))
         ->assertSessionHasErrors([
             'chief_name',
             'chief_email',
-            'chief_password',
         ]);
 
     $this->assertDatabaseMissing(Station::class, [
@@ -150,8 +151,8 @@ test('lgu admin can import barangays and create a captain', function () {
             'barangay_id' => $barangay->id,
             'name' => 'Captain Agusan',
             'email' => 'captain.agusan@example.com',
+            'set_password' => true,
             'password' => 'password123',
-            'password_confirmation' => 'password123',
             'phone' => '09171234567',
         ])
         ->assertRedirect()
@@ -324,8 +325,9 @@ test('password remains hashed when creating captains', function () {
             'barangay_id' => $barangay->id,
             'name' => 'Captain',
             'email' => 'cap@example.com',
+            'phone' => '09171234567',
+            'set_password' => true,
             'password' => 'password123',
-            'password_confirmation' => 'password123',
         ]);
 
     $captain = User::query()->where('email', 'cap@example.com')->firstOrFail();

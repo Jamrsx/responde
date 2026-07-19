@@ -5,12 +5,15 @@ import {
     MapContainer,
     Marker,
     TileLayer,
+    Tooltip,
     useMap,
     useMapEvents,
 } from 'react-leaflet';
 
 import 'leaflet/dist/leaflet.css';
 
+import { stationMarkerSvg } from '@/components/lgu/stationIcons';
+import type { StationIconKey } from '@/components/lgu/stationIcons';
 import { buildOutsideMask, OUTSIDE_MASK_STYLE } from '@/lib/mapMask';
 import { MAP_FIT_MAX_ZOOM, MAP_MAX_ZOOM } from '@/lib/mapZoom';
 
@@ -20,6 +23,7 @@ type StationMarker = {
     latitude: number;
     longitude: number;
     color?: string;
+    iconKey?: StationIconKey;
 };
 
 function FitMarkers({ markers }: { markers: StationMarker[] }) {
@@ -70,6 +74,33 @@ function FocusMarker({ marker }: { marker: StationMarker | null }) {
         // Only re-focus when the selected station changes, not marker color updates.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [focusKey, map]);
+
+    return null;
+}
+
+function FocusPosition({
+    position,
+}: {
+    position: { latitude: number; longitude: number; zoom?: number } | null;
+}) {
+    const map = useMap();
+    const positionKey = position
+        ? `${position.latitude}:${position.longitude}:${position.zoom ?? 18}`
+        : '';
+
+    useEffect(() => {
+        if (!position || !positionKey) {
+            return;
+        }
+
+        map.flyTo(
+            [position.latitude, position.longitude],
+            position.zoom ?? 18,
+            { duration: 0.6 },
+        );
+        // Focus only when coordinates change.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [positionKey, map]);
 
     return null;
 }
@@ -126,19 +157,21 @@ function LockToBoundary({
     return null;
 }
 
-const markerIcon = (color = '#e0752e') =>
+const markerIcon = (color = '#e0752e', iconKey: StationIconKey = 'generic') =>
     L.divIcon({
-        className: '',
-        html: `<div style="width:16px;height:16px;border-radius:9999px;background:${color};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.35)"></div>`,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8],
+        className: 'leaflet-div-icon responde-station-marker',
+        html: `<div style="display:flex;width:34px;height:34px;align-items:center;justify-content:center;border-radius:9999px;background:${color};border:2px solid white;box-shadow:0 2px 7px rgba(0,0,0,.35)"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${stationMarkerSvg(iconKey)}</svg></div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
     });
 
 export default function StationPointMap({
     center,
     markers,
     selected,
+    selectedIconKey = 'generic',
     focusMarkerId = null,
+    focusPosition = null,
     onPick,
     onMarkerClick,
     pickEnabled = true,
@@ -150,7 +183,13 @@ export default function StationPointMap({
     center: [number, number];
     markers: StationMarker[];
     selected?: { latitude: number; longitude: number } | null;
+    selectedIconKey?: StationIconKey;
     focusMarkerId?: number | string | null;
+    focusPosition?: {
+        latitude: number;
+        longitude: number;
+        zoom?: number;
+    } | null;
     onPick?: (lat: number, lng: number) => void;
     onMarkerClick?: (markerId: number | string) => void;
     pickEnabled?: boolean;
@@ -246,6 +285,7 @@ export default function StationPointMap({
                 <LockToBoundary boundary={boundary} />
                 {fitMarkers && <FitMarkers markers={markers} />}
                 <FocusMarker marker={focusMarker} />
+                <FocusPosition position={focusPosition} />
                 {outsideMask && (
                     <GeoJSON
                         data={outsideMask}
@@ -268,7 +308,7 @@ export default function StationPointMap({
                     <Marker
                         key={marker.id}
                         position={[marker.latitude, marker.longitude]}
-                        icon={markerIcon(marker.color)}
+                        icon={markerIcon(marker.color, marker.iconKey)}
                         title={marker.name}
                         eventHandlers={
                             onMarkerClick
@@ -283,12 +323,16 @@ export default function StationPointMap({
                                   }
                                 : undefined
                         }
-                    />
+                    >
+                        <Tooltip direction="top" offset={[0, -16]}>
+                            {marker.name}
+                        </Tooltip>
+                    </Marker>
                 ))}
                 {selected && (
                     <Marker
                         position={[selected.latitude, selected.longitude]}
-                        icon={markerIcon('#2563eb')}
+                        icon={markerIcon('#2563eb', selectedIconKey)}
                     />
                 )}
                 {onPick && (

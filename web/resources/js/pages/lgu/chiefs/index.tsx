@@ -4,6 +4,8 @@ import type { FormEvent } from 'react';
 
 import FormField, { inputClassName } from '@/components/admin/FormField';
 import Modal from '@/components/admin/Modal';
+import type { StationIconKey } from '@/components/lgu/stationIcons';
+import { resolveStationIcon } from '@/components/lgu/stationIcons';
 import StationPointMap from '@/components/lgu/StationPointMap';
 import LguLayout from '@/layouts/LguLayout';
 
@@ -31,6 +33,7 @@ type Station = {
     name: string;
     type: string | null;
     type_code: string | null;
+    icon_key: StationIconKey;
     barangay: string | null;
     address: string | null;
     latitude: string | null;
@@ -303,6 +306,10 @@ export default function LguChiefsIndex({
                     name: station.name,
                     latitude: Number(station.latitude),
                     longitude: Number(station.longitude),
+                    iconKey: resolveStationIcon(
+                        station.icon_key,
+                        station.type_code,
+                    ),
                     color:
                         selectedStationId === station.id
                             ? '#2563eb'

@@ -3,11 +3,27 @@ import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import FormField, { inputClassName } from '@/components/admin/FormField';
+import {
+    defaultStationIcon,
+    resolveStationIcon,
+    StationIconPicker,
+} from '@/components/lgu/stationIcons';
+import type { StationIconKey } from '@/components/lgu/stationIcons';
 import StationPointMap from '@/components/lgu/StationPointMap';
 import LguLayout from '@/layouts/LguLayout';
 
 type StationType = { id: number; name: string; code: string };
 type Barangay = { id: number; name: string; code: string | null };
+type ExistingStation = {
+    id: number;
+    name: string;
+    latitude: string;
+    longitude: string;
+    approval_status: string;
+    icon_key: StationIconKey;
+    type: string | null;
+    type_code: string | null;
+};
 
 type Props = {
     lgu: {
@@ -19,28 +35,25 @@ type Props = {
     };
     stationTypes: StationType[];
     barangays: Barangay[];
+    existingStations: ExistingStation[];
     mapUrl: string | null;
 };
-
-function generatePassword(length = 12): string {
-    const alphabet =
-        'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$';
-    const values = new Uint32Array(length);
-    crypto.getRandomValues(values);
-
-    return Array.from(
-        values,
-        (value) => alphabet[value % alphabet.length],
-    ).join('');
-}
 
 export default function LguStationsCreate({
     lgu,
     stationTypes,
     barangays,
+    existingStations,
     mapUrl,
 }: Props) {
+    const [locationMessage, setLocationMessage] = useState<string | null>(null);
+    const [locating, setLocating] = useState(false);
     const [showChiefPassword, setShowChiefPassword] = useState(false);
+    const [locationFocus, setLocationFocus] = useState<{
+        latitude: number;
+        longitude: number;
+        zoom: number;
+    } | null>(null);
     const center = useMemo<[number, number]>(() => {
         if (lgu.latitude && lgu.longitude) {
             return [Number(lgu.latitude), Number(lgu.longitude)];
@@ -49,8 +62,30 @@ export default function LguStationsCreate({
         return [12.8797, 121.774];
     }, [lgu.latitude, lgu.longitude]);
 
+    const existingMarkers = useMemo(
+        () =>
+            existingStations.map((station) => ({
+                id: station.id,
+                name: `${station.name}${station.type ? ` · ${station.type}` : ''}`,
+                latitude: Number(station.latitude),
+                longitude: Number(station.longitude),
+                iconKey: resolveStationIcon(
+                    station.icon_key,
+                    station.type_code,
+                ),
+                color:
+                    station.approval_status === 'pending'
+                        ? '#d97706'
+                        : station.approval_status === 'rejected'
+                          ? '#dc2626'
+                          : '#047857',
+            })),
+        [existingStations],
+    );
+
     const form = useForm({
         station_type_id: String(stationTypes[0]?.id ?? ''),
+        icon_key: defaultStationIcon(stationTypes[0]?.code),
         other_type_name: '',
         barangay_id: '',
         name: '',
@@ -62,9 +97,8 @@ export default function LguStationsCreate({
         assign_chief: true,
         chief_name: '',
         chief_email: '',
-        chief_phone: '',
+        set_chief_password: false,
         chief_password: '',
-        chief_password_confirmation: '',
     });
 
     const selectedType = stationTypes.find(
@@ -76,27 +110,53 @@ export default function LguStationsCreate({
         (barangay) => String(barangay.id) === String(form.data.barangay_id),
     )?.code;
 
-    const submit = (event: FormEvent) => {
-        event.preventDefault();
-        console.log('[Responde LGU] Creating station from page', {
-            ...form.data,
-            chief_password: form.data.chief_password ? '[provided]' : '',
-            chief_password_confirmation: form.data.chief_password_confirmation
-                ? '[provided]'
-                : '',
-        });
-        form.post('/lgu/stations');
+    const useCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            setLocationMessage('Location is not supported by this browser.');
+
+            return;
+        }
+
+        setLocating(true);
+        setLocationMessage('Getting your current location...');
+        console.log('[Responde LGU] Requesting current location');
+
+        navigator.geolocation.getCurrentPosition(
+            ({ coords }) => {
+                const latitude = Number(coords.latitude.toFixed(7));
+                const longitude = Number(coords.longitude.toFixed(7));
+
+                form.setData((data) => ({
+                    ...data,
+                    latitude: String(latitude),
+                    longitude: String(longitude),
+                }));
+                setLocationFocus({ latitude, longitude, zoom: 18 });
+                setLocationMessage('Current location placed on the map.');
+                setLocating(false);
+                console.log('[Responde LGU] Current location placed', {
+                    latitude,
+                    longitude,
+                    accuracy: coords.accuracy,
+                });
+            },
+            (error) => {
+                const message =
+                    error.code === error.PERMISSION_DENIED
+                        ? 'Location permission was denied. Allow location access and try again.'
+                        : 'Your location could not be detected. Try again or place the pin manually.';
+                setLocationMessage(message);
+                setLocating(false);
+                console.error('[Responde LGU] Current location failed', error);
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+        );
     };
 
-    const applyGeneratedPassword = () => {
-        const password = generatePassword();
-        form.setData((data) => ({
-            ...data,
-            chief_password: password,
-            chief_password_confirmation: password,
-        }));
-        setShowChiefPassword(true);
-        console.log('[Responde LGU] Generated station chief password');
+    const submit = (event: FormEvent) => {
+        event.preventDefault();
+        console.log('[Responde LGU] Creating station from page', form.data);
+        form.post('/lgu/stations');
     };
 
     return (
@@ -121,13 +181,53 @@ export default function LguStationsCreate({
             >
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.9fr)]">
                     <section className="self-start xl:sticky xl:top-4">
-                        <h2 className="mb-1 text-base font-bold text-slate-900">
-                            Station location
-                        </h2>
-                        <p className="mb-3 text-xs text-slate-500">
-                            Click the map to place or move the station marker
-                            inside your LGU boundary.
-                        </p>
+                        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h2 className="text-base font-bold text-slate-900">
+                                    Station location
+                                </h2>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    Click the map or use your current location
+                                    to place the station marker.
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-600">
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+                                        Existing approved
+                                    </span>
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="h-2.5 w-2.5 rounded-full bg-amber-600" />
+                                        Existing pending
+                                    </span>
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
+                                        Existing rejected
+                                    </span>
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
+                                        New station
+                                    </span>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={useCurrentLocation}
+                                disabled={locating}
+                                className="inline-flex min-h-11 items-center rounded-lg border border-brand bg-white px-4 text-sm font-semibold text-brand-dark hover:bg-brand-light disabled:cursor-wait disabled:opacity-60"
+                            >
+                                {locating
+                                    ? 'Getting location...'
+                                    : 'Use my current location'}
+                            </button>
+                        </div>
+                        {locationMessage && (
+                            <p
+                                className="mb-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700"
+                                role="status"
+                            >
+                                {locationMessage}
+                            </p>
+                        )}
                         <StationPointMap
                             center={
                                 form.data.latitude && form.data.longitude
@@ -137,7 +237,11 @@ export default function LguStationsCreate({
                                       ]
                                     : center
                             }
-                            markers={[]}
+                            markers={existingMarkers}
+                            selectedIconKey={
+                                form.data.icon_key as StationIconKey
+                            }
+                            focusPosition={locationFocus}
                             selected={
                                 form.data.latitude && form.data.longitude
                                     ? {
@@ -203,6 +307,9 @@ export default function LguStationsCreate({
                                     form.setData((data) => ({
                                         ...data,
                                         station_type_id: nextTypeId,
+                                        icon_key: defaultStationIcon(
+                                            nextType?.code,
+                                        ),
                                         other_type_name:
                                             nextType?.code === 'other'
                                                 ? data.other_type_name
@@ -218,6 +325,22 @@ export default function LguStationsCreate({
                                 ))}
                             </select>
                         </FormField>
+
+                        <StationIconPicker
+                            value={form.data.icon_key as StationIconKey}
+                            onChange={(iconKey) => {
+                                form.setData('icon_key', iconKey);
+                                console.log(
+                                    '[Responde LGU] Station icon selected',
+                                    iconKey,
+                                );
+                            }}
+                        />
+                        {form.errors.icon_key && (
+                            <p className="-mt-2 text-xs text-red-600">
+                                {form.errors.icon_key}
+                            </p>
+                        )}
 
                         {isOtherType && (
                             <FormField
@@ -350,8 +473,9 @@ export default function LguStationsCreate({
                                         Assign station chief now
                                     </span>
                                     <span className="mt-1 block text-xs leading-5 text-slate-500">
-                                        Create the chief account together with
-                                        this station.
+                                        Enter the chief name and email. You can
+                                        set a password to mail, or let the
+                                        system generate one.
                                     </span>
                                 </span>
                                 <input
@@ -359,14 +483,20 @@ export default function LguStationsCreate({
                                     type="checkbox"
                                     checked={form.data.assign_chief}
                                     onChange={(event) => {
-                                        form.setData(
-                                            'assign_chief',
-                                            event.target.checked,
-                                        );
+                                        form.setData((data) => ({
+                                            ...data,
+                                            assign_chief: event.target.checked,
+                                            set_chief_password: event.target
+                                                .checked
+                                                ? data.set_chief_password
+                                                : false,
+                                            chief_password: event.target.checked
+                                                ? data.chief_password
+                                                : '',
+                                        }));
                                         form.clearErrors(
                                             'chief_name',
                                             'chief_email',
-                                            'chief_phone',
                                             'chief_password',
                                         );
                                         console.log(
@@ -387,6 +517,7 @@ export default function LguStationsCreate({
                                     >
                                         <input
                                             id="create-chief-name"
+                                            type="text"
                                             className={inputClassName}
                                             value={form.data.chief_name}
                                             onChange={(event) =>
@@ -395,6 +526,7 @@ export default function LguStationsCreate({
                                                     event.target.value,
                                                 )
                                             }
+                                            autoComplete="name"
                                             placeholder="Chief full name"
                                             required
                                         />
@@ -421,111 +553,99 @@ export default function LguStationsCreate({
                                         />
                                     </FormField>
 
-                                    <FormField
-                                        label="Chief phone"
-                                        htmlFor="create-chief-phone"
-                                        error={form.errors.chief_phone}
+                                    <label
+                                        htmlFor="set-chief-password"
+                                        className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-200 bg-white px-3 py-3"
                                     >
+                                        <span>
+                                            <span className="block text-sm font-semibold text-slate-900">
+                                                Set password manually
+                                            </span>
+                                            <span className="mt-1 block text-xs leading-5 text-slate-500">
+                                                If unchecked, the system
+                                                generates an 8-character
+                                                password and emails it.
+                                            </span>
+                                        </span>
                                         <input
-                                            id="create-chief-phone"
-                                            className={inputClassName}
-                                            value={form.data.chief_phone}
-                                            onChange={(event) =>
-                                                form.setData(
-                                                    'chief_phone',
-                                                    event.target.value.replace(
-                                                        /\D/g,
-                                                        '',
-                                                    ),
-                                                )
+                                            id="set-chief-password"
+                                            type="checkbox"
+                                            checked={
+                                                form.data.set_chief_password
                                             }
-                                            inputMode="numeric"
-                                            maxLength={11}
-                                            placeholder="09XXXXXXXXX"
+                                            onChange={(event) => {
+                                                form.setData((data) => ({
+                                                    ...data,
+                                                    set_chief_password:
+                                                        event.target.checked,
+                                                    chief_password: event.target
+                                                        .checked
+                                                        ? data.chief_password
+                                                        : '',
+                                                }));
+                                                form.clearErrors(
+                                                    'chief_password',
+                                                );
+                                                console.log(
+                                                    '[Responde LGU] Set chief password manually',
+                                                    event.target.checked,
+                                                );
+                                            }}
+                                            className="mt-0.5 h-5 w-5 rounded border-slate-300 text-brand focus:ring-brand"
                                         />
-                                    </FormField>
+                                    </label>
 
-                                    <div className="flex items-center justify-between gap-2">
-                                        <p className="text-sm font-medium text-slate-700">
-                                            Account password
-                                        </p>
-                                        <button
-                                            type="button"
-                                            onClick={applyGeneratedPassword}
-                                            className="text-xs font-semibold text-brand hover:underline"
+                                    {form.data.set_chief_password ? (
+                                        <FormField
+                                            label="Password to email"
+                                            htmlFor="create-chief-password"
+                                            error={form.errors.chief_password}
                                         >
-                                            Generate password
-                                        </button>
-                                    </div>
-
-                                    <FormField
-                                        label="Password"
-                                        htmlFor="create-chief-password"
-                                        error={form.errors.chief_password}
-                                    >
-                                        <div className="flex gap-2">
-                                            <input
-                                                id="create-chief-password"
-                                                type={
-                                                    showChiefPassword
-                                                        ? 'text'
-                                                        : 'password'
-                                                }
-                                                className={inputClassName}
-                                                value={form.data.chief_password}
-                                                onChange={(event) =>
-                                                    form.setData(
-                                                        'chief_password',
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                minLength={8}
-                                                required
-                                                autoComplete="new-password"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    setShowChiefPassword(
-                                                        (value) => !value,
-                                                    )
-                                                }
-                                                className="min-h-11 shrink-0 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                            >
-                                                {showChiefPassword
-                                                    ? 'Hide'
-                                                    : 'Show'}
-                                            </button>
-                                        </div>
-                                    </FormField>
-
-                                    <FormField
-                                        label="Confirm password"
-                                        htmlFor="create-chief-password-confirm"
-                                    >
-                                        <input
-                                            id="create-chief-password-confirm"
-                                            type={
-                                                showChiefPassword
-                                                    ? 'text'
-                                                    : 'password'
-                                            }
-                                            className={inputClassName}
-                                            value={
-                                                form.data
-                                                    .chief_password_confirmation
-                                            }
-                                            onChange={(event) =>
-                                                form.setData(
-                                                    'chief_password_confirmation',
-                                                    event.target.value,
-                                                )
-                                            }
-                                            minLength={8}
-                                            required
-                                            autoComplete="new-password"
-                                        />
-                                    </FormField>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    id="create-chief-password"
+                                                    type={
+                                                        showChiefPassword
+                                                            ? 'text'
+                                                            : 'password'
+                                                    }
+                                                    className={inputClassName}
+                                                    value={
+                                                        form.data.chief_password
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'chief_password',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                    autoComplete="new-password"
+                                                    minLength={8}
+                                                    placeholder="At least 8 characters"
+                                                    required
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setShowChiefPassword(
+                                                            (value) => !value,
+                                                        )
+                                                    }
+                                                    className="min-h-11 shrink-0 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                                                >
+                                                    {showChiefPassword
+                                                        ? 'Hide'
+                                                        : 'Show'}
+                                                </button>
+                                            </div>
+                                        </FormField>
+                                    ) : (
+                                        <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
+                                            The system will generate an
+                                            8-character password and email it to
+                                            the chief.
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </section>
@@ -543,7 +663,9 @@ export default function LguStationsCreate({
                                 className="min-h-11 rounded-lg bg-brand px-5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
                             >
                                 {form.processing
-                                    ? 'Saving...'
+                                    ? form.data.assign_chief
+                                        ? 'Saving and sending email...'
+                                        : 'Saving...'
                                     : form.data.assign_chief
                                       ? 'Save station and chief'
                                       : 'Save station'}

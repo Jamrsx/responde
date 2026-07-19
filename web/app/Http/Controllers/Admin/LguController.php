@@ -2,17 +2,23 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Users\CreateManagedAccount;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreLguRequest;
 use App\Http\Requests\Admin\UpdateLguRequest;
+use App\Mail\LguAdminCredentialsMail;
 use App\Models\AuditLog;
 use App\Models\Lgu;
 use App\UserRole;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class LguController extends Controller
 {
@@ -38,34 +44,114 @@ class LguController extends Controller
         return Inertia::render('admin/lgus/create');
     }
 
-    public function store(StoreLguRequest $request): RedirectResponse
-    {
-        $lgu = Lgu::query()->create($request->validated());
+    public function store(
+        StoreLguRequest $request,
+        CreateManagedAccount $createManagedAccount,
+    ): RedirectResponse {
+        $actor = $request->user();
+        abort_if($actor === null, 403);
 
-        AuditLog::query()->create([
-            'user_id' => $request->user()?->id,
-            'action' => 'lgu.created',
-            'auditable_type' => Lgu::class,
-            'auditable_id' => $lgu->id,
-            'new_values' => $lgu->only([
-                'name',
-                'code',
-                'province',
-                'municipality',
-                'psgc_code',
-                'classification',
-                'region',
-                'latitude',
-                'longitude',
-                'area_km2',
-            ]),
+        $validated = $request->validated();
+
+        try {
+            $lgu = DB::transaction(function () use (
+                $actor,
+                $validated,
+                $createManagedAccount,
+            ): Lgu {
+                $lgu = Lgu::query()->create([
+                    'name' => $validated['name'],
+                    'code' => $validated['code'] ?? null,
+                    'province' => $validated['province'] ?? null,
+                    'municipality' => $validated['municipality'] ?? null,
+                    'contact_number' => $validated['contact_number'] ?? null,
+                    'psgc_code' => $validated['psgc_code'] ?? null,
+                    'classification' => $validated['classification'] ?? null,
+                    'region' => $validated['region'] ?? null,
+                    'latitude' => $validated['latitude'] ?? null,
+                    'longitude' => $validated['longitude'] ?? null,
+                    'area_km2' => $validated['area_km2'] ?? null,
+                ]);
+
+                AuditLog::query()->create([
+                    'user_id' => $actor->id,
+                    'action' => 'lgu.created',
+                    'auditable_type' => Lgu::class,
+                    'auditable_id' => $lgu->id,
+                    'new_values' => $lgu->only([
+                        'name',
+                        'code',
+                        'province',
+                        'municipality',
+                        'psgc_code',
+                        'classification',
+                        'region',
+                        'latitude',
+                        'longitude',
+                        'area_km2',
+                    ]),
+                ]);
+
+                $temporaryPassword = filled($validated['admin_password'] ?? null)
+                    ? (string) $validated['admin_password']
+                    : Str::password(
+                        length: 8,
+                        letters: true,
+                        numbers: true,
+                        symbols: false,
+                        spaces: false,
+                    );
+
+                $admin = $createManagedAccount->execute($actor, [
+                    'name' => $validated['admin_name'],
+                    'email' => $validated['admin_email'],
+                    'password' => $temporaryPassword,
+                    'phone' => $validated['admin_phone'] ?? null,
+                    'lgu_id' => $lgu->id,
+                    'station_id' => null,
+                ]);
+
+                Mail::to($admin->email)->send(
+                    new LguAdminCredentialsMail(
+                        adminName: $admin->name,
+                        lguName: $lgu->name,
+                        emailAddress: $admin->email,
+                        temporaryPassword: $temporaryPassword,
+                        loginUrl: route('login', absolute: true),
+                    ),
+                );
+
+                return $lgu;
+            });
+        } catch (Throwable $exception) {
+            report($exception);
+            Log::error('LGU and administrator creation failed.', [
+                'actor_user_id' => $actor->id,
+                'lgu_name' => $validated['name'],
+                'admin_email' => $validated['admin_email'],
+                'error' => $exception->getMessage(),
+            ]);
+
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'The LGU was not created because the administrator account email could not be sent. Check the mail settings and try again.',
+                );
+        }
+
+        Log::info('LGU and administrator created.', [
+            'lgu_id' => $lgu->id,
+            'actor_user_id' => $actor->id,
+            'admin_email' => $validated['admin_email'],
         ]);
-
-        Log::info('LGU created.', ['lgu_id' => $lgu->id, 'actor_user_id' => $request->user()?->id]);
 
         return redirect()
             ->route('admin.lgus.index')
-            ->with('success', "{$lgu->name} was added successfully.");
+            ->with(
+                'success',
+                "{$lgu->name} and its administrator account were added. Login credentials were emailed to {$validated['admin_email']}.",
+            );
     }
 
     public function edit(Lgu $lgu): Response

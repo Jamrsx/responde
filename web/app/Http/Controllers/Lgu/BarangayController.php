@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Lgu\Concerns\ResolvesCurrentLgu;
 use App\Http\Requests\Lgu\ImportBarangaysRequest;
 use App\Http\Requests\Lgu\StoreCaptainRequest;
+use App\Mail\BarangayCaptainCredentialsMail;
 use App\Models\AuditLog;
 use App\Models\Barangay;
 use App\Models\User;
@@ -15,9 +16,12 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class BarangayController extends Controller
 {
@@ -170,21 +174,78 @@ class BarangayController extends Controller
         CreateCaptainAccount $createCaptainAccount,
     ): RedirectResponse {
         $lgu = $this->currentLgu($request);
+        $actor = $request->user();
+        abort_if($actor === null, 403);
+
         $barangay = Barangay::query()
             ->whereKey($request->integer('barangay_id'))
             ->where('lgu_id', $lgu->id)
             ->firstOrFail();
+        $validated = $request->validated();
 
-        $account = $createCaptainAccount->execute($request->user(), $barangay, [
-            'name' => $request->string('name')->toString(),
-            'email' => $request->string('email')->toString(),
-            'password' => $request->string('password')->toString(),
-            'phone' => $request->filled('phone') ? $request->string('phone')->toString() : null,
-        ]);
+        try {
+            $account = DB::transaction(function () use (
+                $actor,
+                $barangay,
+                $lgu,
+                $validated,
+                $createCaptainAccount,
+            ): User {
+                $temporaryPassword = filled($validated['password'] ?? null)
+                    ? (string) $validated['password']
+                    : Str::password(
+                        length: 8,
+                        letters: true,
+                        numbers: true,
+                        symbols: false,
+                        spaces: false,
+                    );
+
+                $account = $createCaptainAccount->execute(
+                    $actor,
+                    $barangay,
+                    [
+                        'name' => $validated['name'],
+                        'email' => $validated['email'],
+                        'password' => $temporaryPassword,
+                        'phone' => $validated['phone'],
+                    ],
+                );
+
+                Mail::to($account->email)->send(
+                    new BarangayCaptainCredentialsMail(
+                        captainName: $account->name,
+                        barangayName: $barangay->name,
+                        lguName: $lgu->name,
+                        emailAddress: $account->email,
+                        temporaryPassword: $temporaryPassword,
+                        loginUrl: route('login', absolute: true),
+                    ),
+                );
+
+                return $account;
+            });
+        } catch (Throwable $exception) {
+            report($exception);
+            Log::error('Barangay captain creation failed.', [
+                'actor_user_id' => $actor->id,
+                'lgu_id' => $lgu->id,
+                'barangay_id' => $barangay->id,
+                'captain_email' => $validated['email'],
+                'error' => $exception->getMessage(),
+            ]);
+
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'The captain account was not created because the credentials email could not be sent. Check the email address and mail settings, then try again.',
+                );
+        }
 
         return back()->with(
             'success',
-            "{$account->name} was assigned as captain of {$barangay->name}.",
+            "{$account->name} was assigned as captain of {$barangay->name}. Login credentials were emailed to {$account->email}.",
         );
     }
 

@@ -29,8 +29,8 @@ type AdminFormData = {
     email: string;
     phone: string;
     lgu_id: string;
+    set_password: boolean;
     password: string;
-    password_confirmation: string;
 };
 
 const emptyForm: AdminFormData = {
@@ -38,13 +38,14 @@ const emptyForm: AdminFormData = {
     email: '',
     phone: '',
     lgu_id: '',
+    set_password: false,
     password: '',
-    password_confirmation: '',
 };
 
 export default function LguAdminsIndex({ admins, lgus }: LguAdminsProps) {
     const [showModal, setShowModal] = useState(false);
     const [search, setSearch] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
     const form = useForm<AdminFormData>(emptyForm);
 
@@ -65,6 +66,7 @@ export default function LguAdminsIndex({ admins, lgus }: LguAdminsProps) {
     const openCreate = () => {
         form.reset();
         form.clearErrors();
+        setShowPassword(false);
         setShowModal(true);
     };
 
@@ -100,6 +102,7 @@ export default function LguAdminsIndex({ admins, lgus }: LguAdminsProps) {
             email: form.data.email,
             phone: phone || null,
             lgu_id: form.data.lgu_id,
+            set_password: form.data.set_password,
         });
 
         form.post('/managed-accounts', {
@@ -309,48 +312,81 @@ export default function LguAdminsIndex({ admins, lgus }: LguAdminsProps) {
                         </select>
                     </FormField>
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <label
+                        htmlFor="admin-set-password"
+                        className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
+                    >
+                        <span>
+                            <span className="block text-sm font-semibold text-slate-900">
+                                Set password manually
+                            </span>
+                            <span className="mt-1 block text-xs leading-5 text-slate-500">
+                                If unchecked, the system generates an
+                                8-character password and emails it.
+                            </span>
+                        </span>
+                        <input
+                            id="admin-set-password"
+                            type="checkbox"
+                            checked={form.data.set_password}
+                            onChange={(event) => {
+                                form.setData((data) => ({
+                                    ...data,
+                                    set_password: event.target.checked,
+                                    password: event.target.checked
+                                        ? data.password
+                                        : '',
+                                }));
+                                form.clearErrors('password');
+                                console.log(
+                                    '[Responde Admin] Set LGU admin password manually',
+                                    event.target.checked,
+                                );
+                            }}
+                            className="mt-0.5 h-5 w-5 rounded border-slate-300 text-brand focus:ring-brand"
+                        />
+                    </label>
+
+                    {form.data.set_password ? (
                         <FormField
-                            label="Password"
+                            label="Password to email"
                             htmlFor="admin-password"
                             error={form.errors.password}
                         >
-                            <input
-                                id="admin-password"
-                                type="password"
-                                value={form.data.password}
-                                onChange={(event) =>
-                                    form.setData('password', event.target.value)
-                                }
-                                required
-                                autoComplete="new-password"
-                                placeholder="At least 8 characters"
-                                className={inputClassName}
-                            />
+                            <div className="flex gap-2">
+                                <input
+                                    id="admin-password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={form.data.password}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'password',
+                                            event.target.value,
+                                        )
+                                    }
+                                    required
+                                    autoComplete="new-password"
+                                    minLength={8}
+                                    placeholder="At least 8 characters"
+                                    className={inputClassName}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setShowPassword((value) => !value)
+                                    }
+                                    className="min-h-11 shrink-0 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                                >
+                                    {showPassword ? 'Hide' : 'Show'}
+                                </button>
+                            </div>
                         </FormField>
-
-                        <FormField
-                            label="Confirm password"
-                            htmlFor="admin-password-confirm"
-                            error={form.errors.password_confirmation}
-                        >
-                            <input
-                                id="admin-password-confirm"
-                                type="password"
-                                value={form.data.password_confirmation}
-                                onChange={(event) =>
-                                    form.setData(
-                                        'password_confirmation',
-                                        event.target.value,
-                                    )
-                                }
-                                required
-                                autoComplete="new-password"
-                                placeholder="Repeat the password"
-                                className={inputClassName}
-                            />
-                        </FormField>
-                    </div>
+                    ) : (
+                        <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs leading-5 text-blue-700">
+                            The system will generate an 8-character temporary
+                            password and email the login credentials.
+                        </p>
+                    )}
 
                     {lgus.length === 0 && (
                         <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -372,7 +408,9 @@ export default function LguAdminsIndex({ admins, lgus }: LguAdminsProps) {
                             disabled={form.processing || lgus.length === 0}
                             className="min-h-11 rounded-lg bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            {form.processing ? 'Creating...' : 'Create account'}
+                            {form.processing
+                                ? 'Creating...'
+                                : 'Create and email account'}
                         </button>
                     </div>
                 </form>

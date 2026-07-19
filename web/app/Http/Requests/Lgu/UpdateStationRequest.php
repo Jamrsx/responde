@@ -32,6 +32,19 @@ class UpdateStationRequest extends FormRequest
                     fn ($query) => $query->where('is_active', true),
                 ),
             ],
+            'icon_key' => [
+                'required',
+                Rule::in([
+                    'police',
+                    'fire',
+                    'disaster',
+                    'medical',
+                    'security',
+                    'rescue',
+                    'government',
+                    'generic',
+                ]),
+            ],
             'other_type_name' => ['nullable', 'string', 'max:255'],
             'barangay_id' => [
                 'nullable',

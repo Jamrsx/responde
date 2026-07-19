@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'lgu_id',
     'station_type_id',
+    'icon_key',
     'barangay_id',
     'chief_user_id',
     'submitted_by_user_id',
@@ -33,6 +34,7 @@ class Station extends Model
     protected $attributes = [
         'status' => 'active',
         'approval_status' => 'approved',
+        'icon_key' => 'generic',
     ];
 
     protected function casts(): array

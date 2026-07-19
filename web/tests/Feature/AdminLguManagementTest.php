@@ -223,8 +223,8 @@ test('managed account phone must be 11 digits starting with 09', function () {
             'email' => 'maria-phone@example.com',
             'phone' => '0917123456',
             'lgu_id' => $lgu->id,
+            'set_password' => true,
             'password' => 'SecurePass123!',
-            'password_confirmation' => 'SecurePass123!',
         ])
         ->assertSessionHasErrors('phone');
 
@@ -234,8 +234,8 @@ test('managed account phone must be 11 digits starting with 09', function () {
             'email' => 'maria-phone2@example.com',
             'phone' => '08171234567',
             'lgu_id' => $lgu->id,
+            'set_password' => true,
             'password' => 'SecurePass123!',
-            'password_confirmation' => 'SecurePass123!',
         ])
         ->assertSessionHasErrors('phone');
 });
@@ -251,8 +251,8 @@ test('super admin can create an lgu admin from the managed accounts endpoint', f
             'email' => 'maria@example.com',
             'phone' => '09171234567',
             'lgu_id' => $lgu->id,
+            'set_password' => true,
             'password' => 'SecurePass123!',
-            'password_confirmation' => 'SecurePass123!',
         ])
         ->assertRedirect()
         ->assertSessionHas('success');

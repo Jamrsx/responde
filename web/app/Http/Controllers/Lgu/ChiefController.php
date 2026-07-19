@@ -59,6 +59,7 @@ class ChiefController extends Controller
                 'id',
                 'name',
                 'station_type_id',
+                'icon_key',
                 'barangay_id',
                 'chief_user_id',
                 'latitude',
@@ -84,6 +85,7 @@ class ChiefController extends Controller
                 'name' => $station->name,
                 'type' => $station->stationType?->name,
                 'type_code' => $station->stationType?->code,
+                'icon_key' => $this->resolveIconKey($station),
                 'barangay' => $station->barangay?->name,
                 'address' => $station->address,
                 'latitude' => $station->latitude,
@@ -244,5 +246,34 @@ class ChiefController extends Controller
         ]);
 
         return back()->with('success', "{$chief->name} was deactivated.");
+    }
+
+    private function resolveIconKey(Station $station): string
+    {
+        $allowed = [
+            'police',
+            'fire',
+            'disaster',
+            'medical',
+            'security',
+            'rescue',
+            'government',
+            'generic',
+        ];
+
+        $stored = (string) ($station->icon_key ?? '');
+
+        if ($stored !== '' && $stored !== 'generic' && in_array($stored, $allowed, true)) {
+            return $stored;
+        }
+
+        return match ($station->stationType?->code) {
+            'pnp' => 'police',
+            'bfp' => 'fire',
+            'drrmo' => 'disaster',
+            'health' => 'medical',
+            'tanod' => 'security',
+            default => in_array($stored, $allowed, true) ? $stored : 'generic',
+        };
     }
 }

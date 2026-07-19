@@ -4,6 +4,14 @@ import type { FormEvent } from 'react';
 
 import FormField, { inputClassName } from '@/components/admin/FormField';
 import Modal from '@/components/admin/Modal';
+import {
+    defaultStationIcon,
+    resolveStationIcon,
+    StationIcon,
+    StationIconPicker,
+    stationIconLabel,
+} from '@/components/lgu/stationIcons';
+import type { StationIconKey } from '@/components/lgu/stationIcons';
 import StationPointMap from '@/components/lgu/StationPointMap';
 import LguLayout from '@/layouts/LguLayout';
 
@@ -19,6 +27,7 @@ type Station = {
     status: string;
     approval_status: string;
     station_type_id: number;
+    icon_key: StationIconKey;
     barangay_id: number | null;
     other_type_name: string | null;
     type: string | null;
@@ -43,6 +52,7 @@ type Props = {
 
 const emptyForm = {
     station_type_id: '',
+    icon_key: 'generic' as StationIconKey,
     other_type_name: '',
     barangay_id: '',
     name: '',
@@ -149,6 +159,10 @@ export default function LguStationsIndex({
                     name: station.name,
                     latitude: Number(station.latitude),
                     longitude: Number(station.longitude),
+                    iconKey: resolveStationIcon(
+                        station.icon_key,
+                        station.type_code,
+                    ),
                     color:
                         selectedStationId === station.id
                             ? '#2563eb'
@@ -204,6 +218,7 @@ export default function LguStationsIndex({
         setEditing(station);
         form.setData({
             station_type_id: String(station.station_type_id),
+            icon_key: resolveStationIcon(station.icon_key, station.type_code),
             other_type_name: station.other_type_name ?? '',
             barangay_id: station.barangay_id ? String(station.barangay_id) : '',
             name: station.name,
@@ -392,26 +407,45 @@ export default function LguStationsIndex({
                                     }`}
                                 >
                                     <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="truncate text-sm font-semibold text-slate-800">
-                                                {station.name}
-                                            </p>
-                                            <p className="text-xs text-slate-500">
-                                                {[
-                                                    station.type,
-                                                    station.barangay,
-                                                ]
-                                                    .filter(Boolean)
-                                                    .join(' · ')}
-                                            </p>
-                                            <p className="mt-1 text-xs text-slate-600">
-                                                {station.chief
-                                                    ? `Chief: ${station.chief.name}`
-                                                    : station.type_code ===
-                                                        'tanod'
-                                                      ? 'Tanod outpost'
-                                                      : 'No chief assigned'}
-                                            </p>
+                                        <div className="flex min-w-0 items-start gap-3">
+                                            <span
+                                                className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700"
+                                                title={stationIconLabel(
+                                                    resolveStationIcon(
+                                                        station.icon_key,
+                                                        station.type_code,
+                                                    ),
+                                                )}
+                                            >
+                                                <StationIcon
+                                                    iconKey={resolveStationIcon(
+                                                        station.icon_key,
+                                                        station.type_code,
+                                                    )}
+                                                    className="h-5 w-5"
+                                                />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-slate-800">
+                                                    {station.name}
+                                                </p>
+                                                <p className="text-xs text-slate-500">
+                                                    {[
+                                                        station.type,
+                                                        station.barangay,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' · ')}
+                                                </p>
+                                                <p className="mt-1 text-xs text-slate-600">
+                                                    {station.chief
+                                                        ? `Chief: ${station.chief.name}`
+                                                        : station.type_code ===
+                                                            'tanod'
+                                                          ? 'Tanod outpost'
+                                                          : 'No chief assigned'}
+                                                </p>
+                                            </div>
                                         </div>
                                         <span
                                             className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -507,6 +541,7 @@ export default function LguStationsIndex({
                                 : center
                         }
                         markers={[]}
+                        selectedIconKey={form.data.icon_key}
                         selected={
                             form.data.latitude && form.data.longitude
                                 ? {
@@ -542,6 +577,9 @@ export default function LguStationsIndex({
                                     form.setData((data) => ({
                                         ...data,
                                         station_type_id: nextTypeId,
+                                        icon_key: defaultStationIcon(
+                                            nextType?.code,
+                                        ),
                                         other_type_name:
                                             nextType?.code === 'other'
                                                 ? data.other_type_name
@@ -563,6 +601,23 @@ export default function LguStationsIndex({
                                 )}
                             </select>
                         </FormField>
+                        <div className="sm:col-span-2">
+                            <StationIconPicker
+                                value={form.data.icon_key}
+                                onChange={(iconKey) => {
+                                    form.setData('icon_key', iconKey);
+                                    console.log(
+                                        '[Responde LGU] Station icon selected for edit',
+                                        iconKey,
+                                    );
+                                }}
+                            />
+                            {form.errors.icon_key && (
+                                <p className="mt-1 text-xs text-red-600">
+                                    {form.errors.icon_key}
+                                </p>
+                            )}
+                        </div>
                         <FormField label="Barangay" htmlFor="station-barangay">
                             <select
                                 id="station-barangay"

@@ -14,3 +14,9 @@
     --color-brand-dark: #c25e1d;
     --color-brand-light: #fbe9da;
 }
+
+/* Custom Leaflet station markers: remove default white square frame. */
+.leaflet-div-icon.responde-station-marker {
+    background: transparent;
+    border: none;
+}
