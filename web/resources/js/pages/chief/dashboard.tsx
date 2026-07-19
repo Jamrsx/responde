@@ -2,6 +2,7 @@ import { Head, Link } from '@inertiajs/react';
 import { useState } from 'react';
 
 import ChiefLayout from '@/layouts/ChiefLayout';
+import { EMERGENCY_SOUND_KEY, playEmergencySiren } from '@/lib/emergencySiren';
 
 type Props = {
     station: {
@@ -44,7 +45,6 @@ type Props = {
     }>;
 };
 
-const EMERGENCY_SOUND_KEY = 'responde-emergency-sound-enabled';
 const DESKTOP_ALERT_KEY = 'responde-desktop-alert-enabled';
 const showBrowserAlert = (message: string) => window.alert(message);
 
@@ -75,22 +75,7 @@ function EmergencyAlertSettings() {
         });
 
         if (next) {
-            try {
-                const audioContext = new AudioContext();
-                const oscillator = audioContext.createOscillator();
-                const gain = audioContext.createGain();
-                oscillator.frequency.value = 660;
-                gain.gain.value = 0.08;
-                oscillator.connect(gain);
-                gain.connect(audioContext.destination);
-                oscillator.start();
-                oscillator.stop(audioContext.currentTime + 0.25);
-                oscillator.addEventListener('ended', () =>
-                    audioContext.close(),
-                );
-            } catch (error) {
-                console.warn('[Responde Chief] Alert sound test failed', error);
-            }
+            playEmergencySiren(5);
         }
     };
 
@@ -131,7 +116,8 @@ function EmergencyAlertSettings() {
                 <h2 className="font-bold text-slate-900">Emergency alerts</h2>
                 <p className="mt-1 text-sm text-slate-500">
                     A live in-app alert always appears for new requests. Sound
-                    and desktop alerts are optional on this device.
+                    plays a 5-second siren when a new emergency is assigned.
+                    Desktop alerts are optional on this device.
                 </p>
             </div>
             <div className="flex flex-wrap gap-2">

@@ -2,6 +2,11 @@ import { Link, router, usePage } from '@inertiajs/react';
 import Pusher from 'pusher-js';
 import { useEffect, useRef, useState } from 'react';
 
+import {
+    isEmergencySoundEnabled,
+    playEmergencySiren,
+} from '@/lib/emergencySiren';
+
 type RealtimeScope = {
     scope: 'lgu' | 'station' | null;
     scope_id: number | null;
@@ -21,7 +26,6 @@ type ScopeUpdatedPayload = {
 
 const FALLBACK_POLL_MS = 5_000;
 const CONNECTED_SAFETY_POLL_MS = 30_000;
-const EMERGENCY_SOUND_KEY = 'responde-emergency-sound-enabled';
 const DESKTOP_ALERT_KEY = 'responde-desktop-alert-enabled';
 
 export default function ScopedRealtimeUpdates() {
@@ -63,34 +67,8 @@ export default function ScopedRealtimeUpdates() {
 
             setShowEmergencyToast(true);
 
-            if (localStorage.getItem(EMERGENCY_SOUND_KEY) === 'true') {
-                try {
-                    const audioContext = new AudioContext();
-                    const oscillator = audioContext.createOscillator();
-                    const gain = audioContext.createGain();
-                    oscillator.type = 'sine';
-                    oscillator.frequency.setValueAtTime(
-                        880,
-                        audioContext.currentTime,
-                    );
-                    gain.gain.setValueAtTime(0.15, audioContext.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(
-                        0.001,
-                        audioContext.currentTime + 0.7,
-                    );
-                    oscillator.connect(gain);
-                    gain.connect(audioContext.destination);
-                    oscillator.start();
-                    oscillator.stop(audioContext.currentTime + 0.7);
-                    oscillator.addEventListener('ended', () =>
-                        audioContext.close(),
-                    );
-                } catch (error) {
-                    console.warn(
-                        '[Responde Realtime] Emergency sound could not play',
-                        error,
-                    );
-                }
+            if (isEmergencySoundEnabled()) {
+                playEmergencySiren(5);
             }
 
             if (
